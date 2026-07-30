@@ -4,8 +4,8 @@ pub fn get_migrations() -> Vec<Migration> {
     vec![
         Migration {
             version: 1,
-            description: "create users table",
-            sql: include_str!("../../migrations/001_create_users.sql"),
+            description: "create preferences table",
+            sql: include_str!("../../migrations/001_create_preferences.sql"),
             kind: MigrationKind::Up,
         },
         Migration {
@@ -60,12 +60,6 @@ pub fn get_migrations() -> Vec<Migration> {
             version: 10,
             description: "create bonuses table",
             sql: include_str!("../../migrations/010_create_bonuses.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 11,
-            description: "create settings table and seed default values",
-            sql: include_str!("../../migrations/011_create_settings.sql"),
             kind: MigrationKind::Up,
         },
     ]
