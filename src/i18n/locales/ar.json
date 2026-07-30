@@ -1,0 +1,64 @@
+{
+  "onboarding": {
+    "welcome": "مرحباً بك في مساعد المعيد",
+    "choose_language": "اختر لغتك المفضلة",
+    "english": "English",
+    "arabic": "العربية",
+    "theme": "المظهر",
+    "light": "فاتح",
+    "dark": "داكن",
+    "profile": "بياناتك الشخصية",
+    "profile_desc": "أدخل اسمك وبريدك الجامعي",
+    "full_name": "الاسم الكامل",
+    "name_placeholder": "مثال: أحمد علي",
+    "email": "البريد الإلكتروني",
+    "email_placeholder": "مثال: ahmed@university.edu",
+    "password": "تعيين كلمة المرور",
+    "password_desc": "هذه الكلمة تفتح التطبيق. لا يوجد استعادة — لا تنساها.",
+    "password_label": "كلمة المرور",
+    "password_placeholder": "على الأقل 6 أحرف",
+    "password_short": "يجب أن تكون 6 أحرف على الأقل",
+    "confirm_password": "تأكيد كلمة المرور",
+    "confirm_placeholder": "أعد كتابة كلمة المرور",
+    "confirm_mismatch": "كلمتا المرور غير متطابقتين",
+    "shortcut": "اختصار عام",
+    "shortcut_desc": "اضغط على مجموعة مفاتيح لفتح نافذة البحث من أي مكان",
+    "shortcut_label": "الاختصار",
+    "shortcut_hint": "اضغط على الحقل ثم اضغط الاختصار المطلوب",
+    "back": "رجوع",
+    "next": "التالي",
+    "saving": "جارٍ الحفظ...",
+    "get_started": "ابدأ الآن"
+  },
+  "sidebar": {
+    "dashboard": "لوحة التحكم",
+    "students": "الطلاب",
+    "grades": "الدرجات",
+    "attendance": "الحضور",
+    "settings": "الإعدادات"
+  },
+  "topbar": {
+    "app_title": "مساعد المعيد",
+    "search_hint": "بحث (Ctrl+Shift+P)"
+  },
+  "dashboard": {
+    "title": "لوحة التحكم",
+    "description": "اختر سنة وفصل دراسي من الشريط العلوي للبدء."
+  },
+  "students": {
+    "title": "الطلاب",
+    "no_filter": "لم يتم تحديد فلتر."
+  },
+  "grades": {
+    "title": "الدرجات",
+    "no_filter": "لم يتم تحديد فلتر."
+  },
+  "attendance": {
+    "title": "الحضور",
+    "no_filter": "لم يتم تحديد فلتر."
+  },
+  "settings": {
+    "title": "الإعدادات",
+    "coming_soon": "قريباً."
+  }
+}

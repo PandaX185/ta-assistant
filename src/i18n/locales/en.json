@@ -1,0 +1,64 @@
+{
+  "onboarding": {
+    "welcome": "Welcome to TA Assistant",
+    "choose_language": "Choose your preferred language",
+    "english": "English",
+    "arabic": "العربية",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "profile": "Your Profile",
+    "profile_desc": "Enter your name and university email",
+    "full_name": "Full Name",
+    "name_placeholder": "e.g. Ahmed Ali",
+    "email": "Email",
+    "email_placeholder": "e.g. ahmed@university.edu",
+    "password": "Set a Password",
+    "password_desc": "This unlocks the app. No recovery option — don't forget it.",
+    "password_label": "Password",
+    "password_placeholder": "At least 6 characters",
+    "password_short": "Must be at least 6 characters",
+    "confirm_password": "Confirm Password",
+    "confirm_placeholder": "Repeat your password",
+    "confirm_mismatch": "Passwords don't match",
+    "shortcut": "Global Shortcut",
+    "shortcut_desc": "Press a key combination to open the search overlay from anywhere",
+    "shortcut_label": "Keybinding",
+    "shortcut_hint": "Click the field and press your desired shortcut",
+    "back": "Back",
+    "next": "Next",
+    "saving": "Saving...",
+    "get_started": "Get Started"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "students": "Students",
+    "grades": "Grades",
+    "attendance": "Attendance",
+    "settings": "Settings"
+  },
+  "topbar": {
+    "app_title": "TA Assistant",
+    "search_hint": "Search (Ctrl+Shift+P)"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "description": "Select a year and semester from the top bar to get started."
+  },
+  "students": {
+    "title": "Students",
+    "no_filter": "No filter selected."
+  },
+  "grades": {
+    "title": "Grades",
+    "no_filter": "No filter selected."
+  },
+  "attendance": {
+    "title": "Attendance",
+    "no_filter": "No filter selected."
+  },
+  "settings": {
+    "title": "Settings",
+    "coming_soon": "Coming soon."
+  }
+}

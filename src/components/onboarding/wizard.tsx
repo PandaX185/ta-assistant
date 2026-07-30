@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { applyLocale } from "@/i18n";
 import StepLanguage from "./step-language";
 import StepProfile from "./step-profile";
 import StepPassword from "./step-password";
@@ -7,6 +9,7 @@ import StepShortcut from "./step-shortcut";
 
 interface FormData {
   locale: string;
+  theme: string;
   name: string;
   email: string;
   password: string;
@@ -20,11 +23,13 @@ interface Props {
 }
 
 export default function OnboardingWizard({ onComplete }: Props) {
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState<FormData>({
     locale: "en",
+    theme: "light",
     name: "",
     email: "",
     password: "",
@@ -33,6 +38,16 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
   const update = (patch: Partial<FormData>) =>
     setData((prev) => ({ ...prev, ...patch }));
+
+  // Apply locale and theme immediately as user selects them
+  useEffect(() => {
+    applyLocale(data.locale);
+  }, [data.locale]);
+
+  useEffect(() => {
+    const isDark = data.theme === "dark";
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [data.theme]);
 
   const canNext = (): boolean => {
     switch (step) {
@@ -56,6 +71,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
         email: data.email.trim(),
         password: data.password,
         locale: data.locale,
+        theme: data.theme,
         globalShortcut: data.globalShortcut,
       });
       onComplete();
@@ -98,8 +114,9 @@ export default function OnboardingWizard({ onComplete }: Props) {
       <div className="w-full max-w-md">
         {step === 0 && (
           <StepLanguage
-            value={data.locale}
-            onChange={(locale) => update({ locale })}
+            locale={data.locale}
+            theme={data.theme}
+            onChange={(patch) => update(patch)}
           />
         )}
         {step === 1 && (
@@ -133,7 +150,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
             disabled={step === 0}
             className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
           >
-            Back
+            {t("onboarding.back")}
           </button>
 
           {step < TOTAL_STEPS - 1 ? (
@@ -142,7 +159,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
               disabled={!canNext()}
               className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-all"
             >
-              Next
+              {t("onboarding.next")}
             </button>
           ) : (
             <button
@@ -150,7 +167,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
               disabled={saving}
               className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-all"
             >
-              {saving ? "Saving..." : "Get Started"}
+              {saving ? t("onboarding.saving") : t("onboarding.get_started")}
             </button>
           )}
         </div>

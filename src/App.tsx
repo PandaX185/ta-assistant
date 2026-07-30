@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
+import { applyLocale } from "@/i18n";
+import { useLocaleStore } from "@/stores/locale-store";
 import Shell from "@/components/layout/shell";
 import OnboardingWizard from "@/components/onboarding/wizard";
 import Dashboard from "@/pages/dashboard";
@@ -13,14 +15,29 @@ import Settings from "@/pages/settings";
 export default function App() {
   const [checking, setChecking] = useState(true);
   const [hasPrefs, setHasPrefs] = useState(false);
+  const setLocale = useLocaleStore((s) => s.setLocale);
 
   useEffect(() => {
     Database.load("sqlite:ta-assistant.db")
       .then(() => invoke("get_preferences"))
-      .then((prefs) => setHasPrefs(prefs !== null))
+      .then((raw) => {
+        if (raw !== null) {
+          const prefs = raw as {
+            locale: string;
+            theme: string;
+          };
+          applyLocale(prefs.locale);
+          setLocale(prefs.locale);
+          document.documentElement.classList.toggle(
+            "dark",
+            prefs.theme === "dark",
+          );
+          setHasPrefs(true);
+        }
+      })
       .catch(console.error)
       .finally(() => setChecking(false));
-  }, []);
+  }, [setLocale]);
 
   if (checking) {
     return (

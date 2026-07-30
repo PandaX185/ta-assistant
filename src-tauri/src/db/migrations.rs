@@ -63,6 +63,12 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/010_create_bonuses.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "add theme column to preferences",
+            sql: include_str!("../../migrations/011_add_theme_to_preferences.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
