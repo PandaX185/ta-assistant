@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import Database from "@tauri-apps/plugin-sql";
 import Shell from "@/components/layout/shell";
 import OnboardingWizard from "@/components/onboarding/wizard";
 import Dashboard from "@/pages/dashboard";
@@ -14,7 +15,9 @@ export default function App() {
   const [hasPrefs, setHasPrefs] = useState(false);
 
   useEffect(() => {
-    invoke("get_preferences")
+    // Load the DB first so tauri-plugin-sql runs pending migrations
+    Database.load("sqlite:ta-assistant.db")
+      .then(() => invoke("get_preferences"))
       .then((prefs) => setHasPrefs(prefs !== null))
       .catch(console.error)
       .finally(() => setChecking(false));
