@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm/
+
+# Rust
+src-tauri/target/
+**/*.rs.bk
+
+# Tauri
+src-tauri/icons/
+
+# Build output
+dist/
+dist-tauri/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+coverage/
+.nyc_output/
+
+# SQLite databases (user data — treat as precious)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
