@@ -16,7 +16,10 @@ fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn open_db(app: &AppHandle) -> Result<Connection, String> {
     let path = db_path(app)?;
-    Connection::open(&path).map_err(|e| format!("Failed to open database: {e}"))
+    let conn = Connection::open(&path).map_err(|e| format!("Failed to open database: {e}"))?;
+    // Run any pending migrations so the DB is always up-to-date
+    crate::db::migrations::run_pending(&conn)?;
+    Ok(conn)
 }
 
 #[derive(Serialize)]

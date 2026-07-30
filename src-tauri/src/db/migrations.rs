@@ -1,3 +1,4 @@
+use rusqlite::Connection;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 pub fn get_migrations() -> Vec<Migration> {
@@ -63,4 +64,50 @@ pub fn get_migrations() -> Vec<Migration> {
             kind: MigrationKind::Up,
         },
     ]
+}
+
+/// Runs all pending migrations on a rusqlite connection.
+/// Uses its own `_schema_migrations` tracking table (separate from tauri-plugin-sql).
+pub fn run_pending(conn: &Connection) -> Result<(), String> {
+    // Ensure our tracking table exists
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS _schema_migrations (version INTEGER PRIMARY KEY);",
+    )
+    .map_err(|e| format!("Failed to create migration tracking table: {e}"))?;
+
+    // Get already-applied versions
+    let mut applied: Vec<i64> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT version FROM _schema_migrations ORDER BY version")
+            .map_err(|e| format!("Failed to query applied migrations: {e}"))?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, i64>(0))
+            .map_err(|e| format!("Failed to read migrations: {e}"))?;
+        for row in rows {
+            applied.push(row.map_err(|e| format!("Failed to read row: {e}"))?);
+        }
+    }
+
+    let all = get_migrations();
+
+    for migration in &all {
+        if applied.contains(&(migration.version as i64)) {
+            continue; // already applied
+        }
+
+        // Run the migration in its own transaction
+        conn.execute_batch(&format!(
+            "BEGIN TRANSACTION; {}; INSERT INTO _schema_migrations (version) VALUES ({}); COMMIT;",
+            migration.sql, migration.version
+        ))
+        .map_err(|e| {
+            format!(
+                "Migration {} ({}) failed: {e}",
+                migration.version, migration.description
+            )
+        })?;
+    }
+
+    Ok(())
 }

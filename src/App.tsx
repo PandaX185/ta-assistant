@@ -15,7 +15,6 @@ export default function App() {
   const [hasPrefs, setHasPrefs] = useState(false);
 
   useEffect(() => {
-    // Load the DB first so tauri-plugin-sql runs pending migrations
     Database.load("sqlite:ta-assistant.db")
       .then(() => invoke("get_preferences"))
       .then((prefs) => setHasPrefs(prefs !== null))
