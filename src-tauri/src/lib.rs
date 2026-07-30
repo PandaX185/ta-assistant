@@ -1,9 +1,15 @@
 use tauri::Manager;
 
+mod db;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:ta-assistant.db", db::migrations::get_migrations())
+                .build(),
+        )
         .setup(|app| {
             #[cfg(debug_assertions)]
             {
