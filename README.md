@@ -53,7 +53,8 @@ Bundles land in `src-tauri/target/release/bundle/`.
 
 ## Security
 
-- The app is password-gated at first launch; the password is hashed with **Argon2** and never stored in plaintext
+- The app is **locked on every launch** with a password set during first-run onboarding
+- The password is verified against an **Argon2** hash and never stored or transmitted in plaintext
 - There is **no recovery option** — losing the password means resetting the app data
 - All data is stored locally; nothing is transmitted anywhere
 

@@ -9,6 +9,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { useFilterStore } from "@/stores/filter-store";
 import Shell from "@/components/layout/shell";
 import OnboardingWizard from "@/components/onboarding/wizard";
+import LockScreen from "@/components/lock-screen";
 import { SpotlightSearch } from "@/components/search/spotlight";
 import Dashboard from "@/pages/dashboard";
 import Students from "@/pages/students";
@@ -64,6 +65,7 @@ function AppContent() {
 export default function App() {
   const [checking, setChecking] = useState(true);
   const [hasPrefs, setHasPrefs] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
   const setLocale = useLocaleStore((s) => s.setLocale);
   const setDarkMode = useUIStore((s) => s.setDarkMode);
 
@@ -96,6 +98,10 @@ export default function App() {
 
   if (!hasPrefs) {
     return <OnboardingWizard onComplete={() => setHasPrefs(true)} />;
+  }
+
+  if (!unlocked) {
+    return <LockScreen onUnlock={() => setUnlocked(true)} />;
   }
 
   return (

@@ -30,6 +30,14 @@
     "saving": "Saving...",
     "get_started": "Get Started"
   },
+  "lock": {
+    "title": "TA Assistant",
+    "description": "Enter your password to unlock the app",
+    "password_placeholder": "Password",
+    "unlock": "Unlock",
+    "unlocking": "Unlocking...",
+    "wrong_password": "Incorrect password. Try again."
+  },
   "sidebar": {
     "dashboard": "Dashboard",
     "students": "Students",

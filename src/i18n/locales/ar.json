@@ -60,5 +60,13 @@
   "settings": {
     "title": "الإعدادات",
     "coming_soon": "قريباً."
+  },
+  "lock": {
+    "title": "مساعد المعيد",
+    "description": "أدخل كلمة المرور لفتح التطبيق",
+    "password_placeholder": "كلمة المرور",
+    "unlock": "فتح",
+    "unlocking": "جارٍ الفتح...",
+    "wrong_password": "كلمة المرور غير صحيحة. حاول مرة أخرى."
   }
 }

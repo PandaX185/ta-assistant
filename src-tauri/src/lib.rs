@@ -28,6 +28,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::preferences::get_preferences,
             commands::preferences::save_preferences,
+            commands::preferences::verify_password,
             commands::preferences::update_theme,
             commands::preferences::update_locale,
             commands::filters::get_semester_years,

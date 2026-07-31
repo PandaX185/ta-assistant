@@ -1,5 +1,9 @@
 use argon2::password_hash::{rand_core::OsRng, SaltString};
-use argon2::{Argon2, PasswordHasher};
+use argon2::{
+    password_hash::{PasswordHash, PasswordVerifier},
+    Argon2, PasswordHasher,
+};
+use rusqlite::OptionalExtension;
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -42,6 +46,27 @@ pub fn get_preferences(app: AppHandle) -> Result<Option<Preferences>, String> {
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(format!("Query failed: {e}")),
     }
+}
+
+#[tauri::command]
+pub fn verify_password(app: AppHandle, password: String) -> Result<bool, String> {
+    let conn = crate::db::open_db(&app)?;
+
+    let stored: Option<String> = conn
+        .query_row("SELECT password FROM preferences WHERE id = 1", [], |row| {
+            row.get(0)
+        })
+        .optional()
+        .map_err(|e| format!("Query failed: {e}"))?;
+
+    let Some(hash) = stored else {
+        return Ok(false);
+    };
+
+    let parsed = PasswordHash::new(&hash).map_err(|e| format!("Stored hash invalid: {e}"))?;
+    Ok(Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok())
 }
 
 #[tauri::command]
