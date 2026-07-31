@@ -14,6 +14,8 @@ pub fn run() {
             commands::preferences::save_preferences,
             commands::preferences::update_theme,
             commands::preferences::update_locale,
+            commands::filters::get_semester_years,
+            commands::filters::get_subjects,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
