@@ -37,6 +37,12 @@ pub fn run() {
             commands::grades::delete_assignment,
             commands::grades::delete_quiz_column,
             commands::grades::delete_assignment_column,
+            commands::attendance_cmd::get_lectures,
+            commands::attendance_cmd::create_lecture,
+            commands::attendance_cmd::delete_lecture,
+            commands::attendance_cmd::get_attendance,
+            commands::attendance_cmd::mark_attendance,
+            commands::attendance_cmd::seed_attendance,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
