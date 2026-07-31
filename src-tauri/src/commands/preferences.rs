@@ -1,25 +1,7 @@
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHasher};
-use rusqlite::Connection;
 use serde::Serialize;
-use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
-
-fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let mut dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {e}"))?;
-    dir.push("ta-assistant.db");
-    Ok(dir)
-}
-
-fn open_db(app: &AppHandle) -> Result<Connection, String> {
-    let path = db_path(app)?;
-    let conn = Connection::open(&path).map_err(|e| format!("Failed to open database: {e}"))?;
-    crate::db::migrations::run_pending(&conn)?;
-    Ok(conn)
-}
+use tauri::AppHandle;
 
 #[derive(Serialize)]
 pub struct Preferences {
@@ -34,7 +16,7 @@ pub struct Preferences {
 
 #[tauri::command]
 pub fn get_preferences(app: AppHandle) -> Result<Option<Preferences>, String> {
-    let conn = open_db(&app)?;
+    let conn = crate::db::open_db(&app)?;
 
     let mut stmt = conn
         .prepare(
@@ -72,7 +54,7 @@ pub fn save_preferences(
     theme: String,
     global_shortcut: String,
 ) -> Result<(), String> {
-    let conn = open_db(&app)?;
+    let conn = crate::db::open_db(&app)?;
 
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
@@ -93,7 +75,7 @@ pub fn save_preferences(
 
 #[tauri::command]
 pub fn update_theme(app: AppHandle, theme: String) -> Result<(), String> {
-    let conn = open_db(&app)?;
+    let conn = crate::db::open_db(&app)?;
     conn.execute(
         "UPDATE preferences SET theme = ?1 WHERE id = 1",
         rusqlite::params![theme],
@@ -104,7 +86,7 @@ pub fn update_theme(app: AppHandle, theme: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn update_locale(app: AppHandle, locale: String) -> Result<(), String> {
-    let conn = open_db(&app)?;
+    let conn = crate::db::open_db(&app)?;
     conn.execute(
         "UPDATE preferences SET locale = ?1 WHERE id = 1",
         rusqlite::params![locale],

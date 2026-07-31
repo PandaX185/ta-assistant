@@ -1,23 +1,5 @@
-use rusqlite::Connection;
 use serde::Serialize;
-use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
-
-fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let mut dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {e}"))?;
-    dir.push("ta-assistant.db");
-    Ok(dir)
-}
-
-fn open_db(app: &AppHandle) -> Result<Connection, String> {
-    let path = db_path(app)?;
-    let conn = Connection::open(&path).map_err(|e| format!("Failed to open database: {e}"))?;
-    crate::db::migrations::run_pending(&conn)?;
-    Ok(conn)
-}
+use tauri::AppHandle;
 
 #[derive(Serialize)]
 pub struct SemesterYear {
@@ -36,7 +18,7 @@ pub struct Subject {
 
 #[tauri::command]
 pub fn get_semester_years(app: AppHandle) -> Result<Vec<SemesterYear>, String> {
-    let conn = open_db(&app)?;
+    let conn = crate::db::open_db(&app)?;
     let mut stmt = conn
         .prepare("SELECT id, year, semester FROM semester_years ORDER BY year DESC, semester")
         .map_err(|e| format!("Query prepare failed: {e}"))?;
@@ -60,7 +42,7 @@ pub fn get_semester_years(app: AppHandle) -> Result<Vec<SemesterYear>, String> {
 
 #[tauri::command]
 pub fn get_subjects(app: AppHandle) -> Result<Vec<Subject>, String> {
-    let conn = open_db(&app)?;
+    let conn = crate::db::open_db(&app)?;
     let mut stmt = conn
         .prepare("SELECT id, name, code, color FROM subjects ORDER BY name")
         .map_err(|e| format!("Query prepare failed: {e}"))?;
@@ -81,4 +63,54 @@ pub fn get_subjects(app: AppHandle) -> Result<Vec<Subject>, String> {
         result.push(row.map_err(|e| format!("Row read failed: {e}"))?);
     }
     Ok(result)
+}
+
+#[tauri::command]
+pub fn create_semester_year(app: AppHandle, year: i64, semester: String) -> Result<(), String> {
+    use rusqlite::params;
+    let conn = crate::db::open_db(&app)?;
+    conn.execute(
+        "INSERT INTO semester_years (id, year, semester) VALUES (?, ?, ?)",
+        params![uuid::Uuid::new_v4().to_string(), year, semester],
+    )
+    .map_err(|e| format!("Create semester/year failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_semester_year(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    conn.execute("DELETE FROM semester_years WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| format!("Delete failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn create_subject(app: AppHandle, name: String, code: Option<String>, color: Option<String>) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    conn.execute(
+        "INSERT INTO subjects (id, name, code, color) VALUES (?, ?, ?, ?)",
+        rusqlite::params![uuid::Uuid::new_v4().to_string(), name, code, color],
+    )
+    .map_err(|e| format!("Create subject failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_subject(app: AppHandle, id: String, name: String, code: Option<String>, color: Option<String>) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    conn.execute(
+        "UPDATE subjects SET name = ?1, code = ?2, color = ?3 WHERE id = ?4",
+        rusqlite::params![name, code, color, id],
+    )
+    .map_err(|e| format!("Update subject failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_subject(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    conn.execute("DELETE FROM subjects WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| format!("Delete subject failed: {e}"))?;
+    Ok(())
 }
