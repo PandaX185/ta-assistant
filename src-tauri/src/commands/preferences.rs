@@ -90,3 +90,25 @@ pub fn save_preferences(
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn update_theme(app: AppHandle, theme: String) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute(
+        "UPDATE preferences SET theme = ?1 WHERE id = 1",
+        rusqlite::params![theme],
+    )
+    .map_err(|e| format!("Update theme failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_locale(app: AppHandle, locale: String) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute(
+        "UPDATE preferences SET locale = ?1 WHERE id = 1",
+        rusqlite::params![locale],
+    )
+    .map_err(|e| format!("Update locale failed: {e}"))?;
+    Ok(())
+}

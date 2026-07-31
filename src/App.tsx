@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { applyLocale } from "@/i18n";
 import { useLocaleStore } from "@/stores/locale-store";
+import { useUIStore } from "@/stores/ui-store";
 import Shell from "@/components/layout/shell";
 import OnboardingWizard from "@/components/onboarding/wizard";
 import Dashboard from "@/pages/dashboard";
@@ -16,6 +17,7 @@ export default function App() {
   const [checking, setChecking] = useState(true);
   const [hasPrefs, setHasPrefs] = useState(false);
   const setLocale = useLocaleStore((s) => s.setLocale);
+  const setDarkMode = useUIStore((s) => s.setDarkMode);
 
   useEffect(() => {
     Database.load("sqlite:ta-assistant.db")
@@ -28,16 +30,13 @@ export default function App() {
           };
           applyLocale(prefs.locale);
           setLocale(prefs.locale);
-          document.documentElement.classList.toggle(
-            "dark",
-            prefs.theme === "dark",
-          );
+          setDarkMode(prefs.theme === "dark");
           setHasPrefs(true);
         }
       })
       .catch(console.error)
       .finally(() => setChecking(false));
-  }, [setLocale]);
+  }, [setLocale, setDarkMode]);
 
   if (checking) {
     return (
