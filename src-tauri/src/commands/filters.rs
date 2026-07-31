@@ -80,13 +80,21 @@ pub fn create_semester_year(app: AppHandle, year: i64, semester: String) -> Resu
 #[tauri::command]
 pub fn delete_semester_year(app: AppHandle, id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    conn.execute("DELETE FROM semester_years WHERE id = ?1", rusqlite::params![id])
-        .map_err(|e| format!("Delete failed: {e}"))?;
+    conn.execute(
+        "DELETE FROM semester_years WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| format!("Delete failed: {e}"))?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn create_subject(app: AppHandle, name: String, code: Option<String>, color: Option<String>) -> Result<(), String> {
+pub fn create_subject(
+    app: AppHandle,
+    name: String,
+    code: Option<String>,
+    color: Option<String>,
+) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
     conn.execute(
         "INSERT INTO subjects (id, name, code, color) VALUES (?, ?, ?, ?)",
@@ -97,7 +105,13 @@ pub fn create_subject(app: AppHandle, name: String, code: Option<String>, color:
 }
 
 #[tauri::command]
-pub fn update_subject(app: AppHandle, id: String, name: String, code: Option<String>, color: Option<String>) -> Result<(), String> {
+pub fn update_subject(
+    app: AppHandle,
+    id: String,
+    name: String,
+    code: Option<String>,
+    color: Option<String>,
+) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
     conn.execute(
         "UPDATE subjects SET name = ?1, code = ?2, color = ?3 WHERE id = ?4",

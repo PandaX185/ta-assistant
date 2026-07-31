@@ -50,8 +50,17 @@ pub fn global_search(app: AppHandle, query: String) -> Result<Vec<SearchResult>,
         .map_err(|e| format!("Search query failed: {e}"))?;
 
     for row in rows {
-        let (id, name, code, year, semester, subject_name, enrollment_id, semester_year_id, subject_id) =
-            row.map_err(|e| format!("Row failed: {e}"))?;
+        let (
+            id,
+            name,
+            code,
+            year,
+            semester,
+            subject_name,
+            enrollment_id,
+            semester_year_id,
+            subject_id,
+        ) = row.map_err(|e| format!("Row failed: {e}"))?;
         let code_str = code.map(|c| format!(" · {}", c)).unwrap_or_default();
         results.push(SearchResult {
             kind: "student".into(),

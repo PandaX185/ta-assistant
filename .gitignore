@@ -13,8 +13,8 @@ src-tauri/target/
 # Generated Tauri schemas
 src-tauri/gen/
 
-# Icons (auto-generated placeholders)
-src-tauri/icons/
+# App icons (committed — required for bundling)
+# Regenerate from app-icon.png with: npx tauri icon app-icon.png
 
 # Build output
 dist/

@@ -156,9 +156,9 @@ pub fn get_grades(
         let (quiz_ids, quiz_scores): (Vec<_>, Vec<_>) = quiz_columns
             .iter()
             .map(|col| {
-                let found = qrows.iter().find(|(_, rn, rd, _)| {
-                    rn == &col.name && rd == &col.date
-                });
+                let found = qrows
+                    .iter()
+                    .find(|(_, rn, rd, _)| rn == &col.name && rd == &col.date);
                 match found {
                     Some((id, _, _, score)) => (Some(id.clone()), *score),
                     None => (None, None),
@@ -192,9 +192,9 @@ pub fn get_grades(
         let (assignment_ids, assignment_scores): (Vec<_>, Vec<_>) = assignment_columns
             .iter()
             .map(|col| {
-                let found = arows.iter().find(|(_, rn, rd, _)| {
-                    rn == &col.name && rd == &col.date
-                });
+                let found = arows
+                    .iter()
+                    .find(|(_, rn, rd, _)| rn == &col.name && rd == &col.date);
                 match found {
                     Some((id, _, _, score)) => (Some(id.clone()), *score),
                     None => (None, None),
@@ -233,9 +233,7 @@ pub fn create_quiz_bulk(
 
     // Get all enrollment IDs for this subject+semester
     let mut stmt = conn
-        .prepare(
-            "SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2",
-        )
+        .prepare("SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2")
         .map_err(|e| format!("Query failed: {e}"))?;
 
     let ids: Vec<String> = stmt
@@ -276,9 +274,7 @@ pub fn create_assignment_bulk(
     let conn = crate::db::open_db(&app)?;
 
     let mut stmt = conn
-        .prepare(
-            "SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2",
-        )
+        .prepare("SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2")
         .map_err(|e| format!("Query failed: {e}"))?;
 
     let ids: Vec<String> = stmt
@@ -344,8 +340,11 @@ pub fn delete_quiz(app: AppHandle, id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn delete_assignment(app: AppHandle, id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    conn.execute("DELETE FROM assignments WHERE id = ?1", rusqlite::params![id])
-        .map_err(|e| format!("Delete assignment failed: {e}"))?;
+    conn.execute(
+        "DELETE FROM assignments WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| format!("Delete assignment failed: {e}"))?;
     Ok(())
 }
 

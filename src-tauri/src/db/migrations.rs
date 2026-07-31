@@ -104,7 +104,7 @@ pub fn run_pending(conn: &Connection) -> Result<(), String> {
     let all = get_migrations();
 
     for migration in &all {
-        if applied.contains(&(migration.version as i64)) {
+        if applied.contains(&migration.version) {
             continue; // already applied
         }
 

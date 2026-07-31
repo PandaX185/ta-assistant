@@ -1,0 +1,51 @@
+name: Release Windows
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    name: Build & release Windows installer
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build & publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: nightly-${{ github.run_number }}
+          releaseName: "TA Assistant nightly (${{ github.sha }})"
+          releaseBody: |
+            Automatic Windows build of commit `${{ github.sha }}`.
+
+            ## What's inside
+            - NSIS installer (`.exe`) — download and run, no admin needed
+            - Built fresh from `main` on every push
+
+            > Nightly builds — expect rough edges. For a stable version, use a tagged release.
+          releaseDraft: false
+          prerelease: true
+          args: --bundles nsis

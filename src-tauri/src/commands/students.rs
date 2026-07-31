@@ -90,7 +90,12 @@ pub fn get_students(app: AppHandle) -> Result<Vec<Student>, String> {
 }
 
 #[tauri::command]
-pub fn create_student(app: AppHandle, name: String, email: Option<String>, student_id: Option<String>) -> Result<String, String> {
+pub fn create_student(
+    app: AppHandle,
+    name: String,
+    email: Option<String>,
+    student_id: Option<String>,
+) -> Result<String, String> {
     let conn = crate::db::open_db(&app)?;
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
@@ -102,7 +107,13 @@ pub fn create_student(app: AppHandle, name: String, email: Option<String>, stude
 }
 
 #[tauri::command]
-pub fn update_student(app: AppHandle, id: String, name: String, email: Option<String>, student_id: Option<String>) -> Result<(), String> {
+pub fn update_student(
+    app: AppHandle,
+    id: String,
+    name: String,
+    email: Option<String>,
+    student_id: Option<String>,
+) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
     conn.execute(
         "UPDATE students SET name = ?1, email = ?2, student_id = ?3 WHERE id = ?4",
@@ -121,7 +132,11 @@ pub fn delete_student(app: AppHandle, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_enrollments(app: AppHandle, semester_year_id: String, subject_id: String) -> Result<Vec<Enrollment>, String> {
+pub fn get_enrollments(
+    app: AppHandle,
+    semester_year_id: String,
+    subject_id: String,
+) -> Result<Vec<Enrollment>, String> {
     let conn = crate::db::open_db(&app)?;
     let mut stmt = conn
         .prepare(
@@ -154,7 +169,12 @@ pub fn get_enrollments(app: AppHandle, semester_year_id: String, subject_id: Str
 }
 
 #[tauri::command]
-pub fn create_enrollment(app: AppHandle, student_id: String, semester_year_id: String, subject_id: String) -> Result<(), String> {
+pub fn create_enrollment(
+    app: AppHandle,
+    student_id: String,
+    semester_year_id: String,
+    subject_id: String,
+) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
     conn.execute(
         "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id) VALUES (?, ?, ?, ?)",
@@ -167,8 +187,11 @@ pub fn create_enrollment(app: AppHandle, student_id: String, semester_year_id: S
 #[tauri::command]
 pub fn delete_enrollment(app: AppHandle, id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    conn.execute("DELETE FROM enrollments WHERE id = ?1", rusqlite::params![id])
-        .map_err(|e| format!("Delete enrollment failed: {e}"))?;
+    conn.execute(
+        "DELETE FROM enrollments WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| format!("Delete enrollment failed: {e}"))?;
     Ok(())
 }
 
