@@ -10,24 +10,22 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useFilterStore } from "@/stores/filter-store";
+import { StudentDetailDialog } from "@/components/students/student-detail-dialog";
 
-interface Student {
-  id: string;
-  name: string;
-  email: string | null;
-  student_id: string | null;
-}
-
-interface Enrollment {
+interface StudentEnrollment {
   id: string;
   student_id: string;
   semester_year_id: string;
@@ -41,33 +39,24 @@ export default function Students() {
   const {
     selectedSemesterYearId,
     selectedSubjectId,
-    semesterYears,
     subjects,
   } = useFilterStore();
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
   const [search, setSearch] = useState("");
 
-  // Dialog state
+  // Add/Edit dialog
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [studentId, setStudentId] = useState("");
 
-  // Enroll dialog
-  const [enrollOpen, setEnrollOpen] = useState(false);
-  const [enrollStudentId, setEnrollStudentId] = useState("");
+  // Detail dialog
+  const [detailEnrollmentId, setDetailEnrollmentId] = useState<string | null>(null);
 
-  const loadStudents = useCallback(async () => {
-    try {
-      const data = await invoke<Student[]>("get_students");
-      setStudents(data);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
+  // Delete confirm
+  const [deleteTarget, setDeleteTarget] = useState<{ studentId: string; name: string } | null>(null);
 
   const loadEnrollments = useCallback(async () => {
     if (!selectedSemesterYearId || !selectedSubjectId) {
@@ -75,7 +64,7 @@ export default function Students() {
       return;
     }
     try {
-      const data = await invoke<Enrollment[]>("get_enrollments", {
+      const data = await invoke<StudentEnrollment[]>("get_enrollments", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
       });
@@ -84,10 +73,6 @@ export default function Students() {
       console.error(e);
     }
   }, [selectedSemesterYearId, selectedSubjectId]);
-
-  useEffect(() => {
-    loadStudents();
-  }, [loadStudents]);
 
   useEffect(() => {
     loadEnrollments();
@@ -100,11 +85,10 @@ export default function Students() {
     setEditId(null);
   };
 
-  const openEdit = (s: Student) => {
-    setEditId(s.id);
-    setName(s.name);
-    setEmail(s.email ?? "");
-    setStudentId(s.student_id ?? "");
+  const openEdit = (enr: StudentEnrollment) => {
+    setEditId(enr.student_id);
+    setName(enr.student_name);
+    setStudentId(enr.student_code ?? "");
     setOpen(true);
   };
 
@@ -118,16 +102,12 @@ export default function Students() {
           email: email || null,
           studentId: studentId || null,
         });
-        resetForm();
-        setOpen(false);
       } else {
-        // Create student
         const newStudentId = await invoke<string>("create_student", {
           name,
           email: email || null,
           studentId: studentId || null,
         });
-        // Auto-enroll if filters are active
         if (selectedSemesterYearId && selectedSubjectId) {
           await invoke("create_enrollment", {
             studentId: newStudentId,
@@ -135,71 +115,61 @@ export default function Students() {
             subjectId: selectedSubjectId,
           });
         }
-        resetForm();
-        setOpen(false);
-        loadStudents();
-        loadEnrollments();
-        return;
       }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await invoke("delete_student", { id });
-      loadStudents();
+      resetForm();
+      setOpen(false);
       loadEnrollments();
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleEnroll = async () => {
-    if (!enrollStudentId || !selectedSemesterYearId || !selectedSubjectId) return;
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
-      await invoke("create_enrollment", {
-        studentId: enrollStudentId,
-        semesterYearId: selectedSemesterYearId,
-        subjectId: selectedSubjectId,
-      });
-      setEnrollStudentId("");
-      setEnrollOpen(false);
+      await invoke("delete_student", { id: deleteTarget.studentId });
+      setDeleteTarget(null);
       loadEnrollments();
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleUnenroll = async (enrollmentId: string) => {
-    try {
-      await invoke("delete_enrollment", { id: enrollmentId });
-      loadEnrollments();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const enrolledIds = new Set(enrollments.map((e) => e.student_id));
-  const filtered = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      (s.student_id ?? "").toLowerCase().includes(search.toLowerCase()),
-  );
-  const unenrolled = filtered.filter((s) => !enrolledIds.has(s.id));
-
-  const selectedSemester = semesterYears.find(
-    (sy) => sy.id === selectedSemesterYearId,
-  );
   const selectedSubject = subjects.find(
     (s) => s.id === selectedSubjectId,
   );
 
+  const filtered = search
+    ? enrollments.filter(
+        (e) =>
+          e.student_name.toLowerCase().includes(search.toLowerCase()) ||
+          (e.student_code ?? "").toLowerCase().includes(search.toLowerCase()),
+      )
+    : enrollments;
+
+  // No filter → empty state
+  if (!selectedSemesterYearId || !selectedSubjectId) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <p className="text-4xl mb-4">👥</p>
+        <h2 className="text-xl font-semibold mb-2">Select a Subject</h2>
+        <p className="text-muted-foreground max-w-md">
+          Choose a semester/year and subject from the filter bar to view enrolled students.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t("students.title")}</h1>
+        <div>
+          <h1 className="text-2xl font-bold">{t("students.title")}</h1>
+          <p className="text-sm text-muted-foreground">
+            {selectedSubject?.name}
+          </p>
+        </div>
         <Dialog
           open={open}
           onOpenChange={(v) => {
@@ -213,6 +183,7 @@ export default function Students() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editId ? "Edit Student" : "New Student"}</DialogTitle>
+              {editId && <DialogDescription>Editing student info</DialogDescription>}
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
@@ -243,9 +214,9 @@ export default function Students() {
                   onChange={(e) => setStudentId(e.target.value)}
                 />
               </div>
-              {!editId && selectedSemesterYearId && selectedSubjectId && (
+              {!editId && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Will also enroll in <span className="font-medium">{selectedSubject?.name}</span>
+                  Will be enrolled in <span className="font-medium">{selectedSubject?.name}</span>
                 </p>
               )}
               <Button onClick={handleSave} className="w-full">
@@ -258,174 +229,65 @@ export default function Students() {
 
       {/* Search */}
       <Input
-        placeholder="Search students..."
+        placeholder="Search by name or ID..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-xs"
       />
 
-      {/* Quick stats */}
-      <div className="flex gap-4 text-sm text-muted-foreground">
-        <span>{students.length} total students</span>
-        {selectedSemester && (
-          <span>
-            · {selectedSemester.year} {selectedSemester.semester}
-          </span>
-        )}
-        {selectedSubject && <span>· {selectedSubject.name}</span>}
-        {selectedSemesterYearId && selectedSubjectId && (
-          <span>· {enrollments.length} enrolled</span>
-        )}
-      </div>
+      {/* Stats */}
+      <p className="text-sm text-muted-foreground">
+        {enrollments.length} student{enrollments.length !== 1 ? "s" : ""} enrolled
+        {search && <> · {filtered.length} match{filtered.length !== 1 ? "es" : ""}</>}
+      </p>
 
-      {/* Enrolled students (requires filter) */}
-      {selectedSemesterYearId && selectedSubjectId ? (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
-              Enrolled — {selectedSubject?.name}
-            </h2>
-            <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  Enroll Student
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Enroll Student</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-2">
-                    <Label>Student</Label>
-                    <Select
-                      value={enrollStudentId}
-                      onValueChange={setEnrollStudentId}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a student" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {unenrolled.length === 0 && (
-                          <SelectItem value="__none" disabled>
-                            {search
-                              ? "No matching students"
-                              : "All students already enrolled"}
-                          </SelectItem>
-                        )}
-                        {unenrolled.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                            {s.student_id ? ` (${s.student_id})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    onClick={handleEnroll}
-                    disabled={!enrollStudentId}
-                    className="w-full"
-                  >
-                    Enroll
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          {enrollments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No students enrolled yet. Use "Enroll Student" above.
-            </p>
-          ) : (
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-medium">Name</th>
-                    <th className="text-left px-4 py-2 font-medium">ID</th>
-                    <th className="text-right px-4 py-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {enrollments.map((enr) => (
-                    <tr key={enr.id} className="border-t">
-                      <td className="px-4 py-2">{enr.student_name}</td>
-                      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                        {enr.student_code ?? "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleUnenroll(enr.id)}
-                        >
-                          Unenroll
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+      {/* Student table */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 border rounded-lg">
+          <p className="text-3xl mb-3">📋</p>
+          <p className="text-muted-foreground">
+            {search
+              ? "No students match your search."
+              : "No students enrolled yet. Add your first student above."}
+          </p>
+        </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          Select a semester/year and subject from the filter bar to manage
-          enrollments.
-        </p>
-      )}
-
-      {/* All students */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">All Students</h2>
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-4 py-2 font-medium">Name</th>
+                <th className="text-left px-4 py-2 font-medium">ID</th>
                 <th className="text-left px-4 py-2 font-medium">Email</th>
-                <th className="text-left px-4 py-2 font-medium">Student ID</th>
-                <th className="text-right px-4 py-2 font-medium">Actions</th>
+                <th className="text-right px-4 py-2 font-medium w-20">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && (
-                <tr className="border-t">
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    {students.length === 0
-                      ? "No students yet. Add your first student above."
-                      : "No students match your search."}
-                  </td>
-                </tr>
-              )}
-              {filtered.map((s) => (
-                <tr key={s.id} className="border-t">
-                  <td className="px-4 py-2">{s.name}</td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">
-                    {s.email ?? "—"}
+              {filtered.map((enr) => (
+                <tr key={enr.id} className="border-t hover:bg-muted/30 cursor-pointer">
+                  <td
+                    className="px-4 py-2 font-medium text-primary hover:underline"
+                    onClick={() => setDetailEnrollmentId(enr.id)}
+                  >
+                    {enr.student_name}
                   </td>
                   <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                    {s.student_id ?? "—"}
+                    {enr.student_code ?? "—"}
                   </td>
-                  <td className="px-4 py-2 text-right space-x-1">
+                  <td className="px-4 py-2 text-xs text-muted-foreground">
+                    {/* Email not in enrollment query, fetch later */}
+                    —
+                  </td>
+                  <td className="px-4 py-2 text-right">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => openEdit(s)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(enr);
+                      }}
                     >
                       Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(s.id)}
-                    >
-                      Delete
                     </Button>
                   </td>
                 </tr>
@@ -433,7 +295,49 @@ export default function Students() {
             </tbody>
           </table>
         </div>
-      </section>
+      )}
+
+      {/* Detail dialog */}
+      <StudentDetailDialog
+        enrollmentId={detailEnrollmentId}
+        onClose={() => setDetailEnrollmentId(null)}
+        onDeleted={() => {
+          setDetailEnrollmentId(null);
+          loadEnrollments();
+        }}
+        onEdit={(enrollmentId) => {
+          const enr = enrollments.find((e) => e.id === enrollmentId);
+          if (enr) {
+            setDetailEnrollmentId(null);
+            openEdit(enr);
+          }
+        }}
+      />
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Student?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deleteTarget?.name}</strong> and all
+              their grades, attendance records, and bonuses. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteConfirm}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

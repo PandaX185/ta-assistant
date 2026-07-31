@@ -1,6 +1,8 @@
 mod commands;
 mod db;
 
+use tauri::Emitter;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -9,6 +11,20 @@ pub fn run() {
                 .add_migrations("sqlite:ta-assistant.db", db::migrations::get_migrations())
                 .build(),
         )
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let _ = app.emit("toggle-search", ());
+                    }
+                })
+                .build(),
+        )
+        .setup(|app| {
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            app.global_shortcut().register("Ctrl+Shift+P")?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::preferences::get_preferences,
             commands::preferences::save_preferences,
@@ -28,6 +44,7 @@ pub fn run() {
             commands::students::get_enrollments,
             commands::students::create_enrollment,
             commands::students::delete_enrollment,
+            commands::students::get_student_detail,
             commands::grades::get_grades,
             commands::grades::create_quiz_bulk,
             commands::grades::create_assignment_bulk,
@@ -43,6 +60,7 @@ pub fn run() {
             commands::attendance_cmd::get_attendance,
             commands::attendance_cmd::mark_attendance,
             commands::attendance_cmd::seed_attendance,
+            commands::search::global_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

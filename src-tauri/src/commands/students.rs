@@ -19,6 +19,51 @@ pub struct Enrollment {
     pub student_code: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct QuizDetailItem {
+    pub id: String,
+    pub name: String,
+    pub max_score: f64,
+    pub score: Option<f64>,
+}
+
+#[derive(Serialize)]
+pub struct AssignmentDetailItem {
+    pub id: String,
+    pub name: String,
+    pub max_score: f64,
+    pub score: Option<f64>,
+}
+
+#[derive(Serialize)]
+pub struct AttendanceDetailItem {
+    pub id: String,
+    pub lecture_id: String,
+    pub lecture_date: String,
+    pub lecture_title: Option<String>,
+    pub status: String,
+}
+
+#[derive(Serialize)]
+pub struct BonusDetailItem {
+    pub id: String,
+    pub value: f64,
+    pub reason: String,
+    pub date: String,
+}
+
+#[derive(Serialize)]
+pub struct StudentDetail {
+    pub student_id: String,
+    pub student_name: String,
+    pub student_code: Option<String>,
+    pub student_email: Option<String>,
+    pub quizzes: Vec<QuizDetailItem>,
+    pub assignments: Vec<AssignmentDetailItem>,
+    pub attendance: Vec<AttendanceDetailItem>,
+    pub bonuses: Vec<BonusDetailItem>,
+}
+
 #[tauri::command]
 pub fn get_students(app: AppHandle) -> Result<Vec<Student>, String> {
     let conn = crate::db::open_db(&app)?;
@@ -103,7 +148,7 @@ pub fn get_enrollments(app: AppHandle, semester_year_id: String, subject_id: Str
 
     let mut result = Vec::new();
     for row in rows {
-        result.push(row.map_err(|e| format!("Row read failed: {e}"))?);
+        result.push(row.map_err(|e| format!("Row failed: {e}"))?);
     }
     Ok(result)
 }
@@ -125,4 +170,127 @@ pub fn delete_enrollment(app: AppHandle, id: String) -> Result<(), String> {
     conn.execute("DELETE FROM enrollments WHERE id = ?1", rusqlite::params![id])
         .map_err(|e| format!("Delete enrollment failed: {e}"))?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_student_detail(app: AppHandle, enrollment_id: String) -> Result<StudentDetail, String> {
+    let conn = crate::db::open_db(&app)?;
+
+    // Get student info
+    let (student_id, student_name, student_code, student_email) = conn
+        .query_row(
+            "SELECT s.id, s.name, s.student_id, s.email
+             FROM enrollments e
+             JOIN students s ON s.id = e.student_id
+             WHERE e.id = ?1",
+            rusqlite::params![enrollment_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .map_err(|e| format!("Student query failed: {e}"))?;
+
+    // Get quizzes
+    let mut qstmt = conn
+        .prepare(
+            "SELECT id, name, max_score, score
+             FROM quizzes
+             WHERE enrollment_id = ?1
+             ORDER BY date, name",
+        )
+        .map_err(|e| format!("Quiz query failed: {e}"))?;
+
+    let quizzes = qstmt
+        .query_map(rusqlite::params![enrollment_id], |row| {
+            Ok(QuizDetailItem {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                max_score: row.get(2)?,
+                score: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Quiz query failed: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get assignments
+    let mut astmt = conn
+        .prepare(
+            "SELECT id, name, max_score, score
+             FROM assignments
+             WHERE enrollment_id = ?1
+             ORDER BY date, name",
+        )
+        .map_err(|e| format!("Assignment query failed: {e}"))?;
+
+    let assignments = astmt
+        .query_map(rusqlite::params![enrollment_id], |row| {
+            Ok(AssignmentDetailItem {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                max_score: row.get(2)?,
+                score: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Assignment query failed: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get attendance
+    let mut attstmt = conn
+        .prepare(
+            "SELECT a.id, l.id, l.date, l.title, a.status
+             FROM attendance a
+             JOIN lectures l ON l.id = a.lecture_id
+             JOIN enrollments e ON e.id = a.enrollment_id
+             WHERE a.enrollment_id = ?1
+             ORDER BY l.date",
+        )
+        .map_err(|e| format!("Attendance query failed: {e}"))?;
+
+    let attendance = attstmt
+        .query_map(rusqlite::params![enrollment_id], |row| {
+            Ok(AttendanceDetailItem {
+                id: row.get(0)?,
+                lecture_id: row.get(1)?,
+                lecture_date: row.get(2)?,
+                lecture_title: row.get(3)?,
+                status: row.get(4)?,
+            })
+        })
+        .map_err(|e| format!("Attendance query failed: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get bonuses
+    let mut bstmt = conn
+        .prepare(
+            "SELECT id, value, reason, date
+             FROM bonuses
+             WHERE enrollment_id = ?1
+             ORDER BY date",
+        )
+        .map_err(|e| format!("Bonus query failed: {e}"))?;
+
+    let bonuses = bstmt
+        .query_map(rusqlite::params![enrollment_id], |row| {
+            Ok(BonusDetailItem {
+                id: row.get(0)?,
+                value: row.get(1)?,
+                reason: row.get(2)?,
+                date: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Bonus query failed: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(StudentDetail {
+        student_id,
+        student_name,
+        student_code,
+        student_email,
+        quizzes,
+        assignments,
+        attendance,
+        bonuses,
+    })
 }
