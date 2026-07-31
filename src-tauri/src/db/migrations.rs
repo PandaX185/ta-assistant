@@ -69,12 +69,6 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/011_add_theme_to_preferences.sql"),
             kind: MigrationKind::Up,
         },
-        Migration {
-            version: 12,
-            description: "add semester_year_id to lectures",
-            sql: include_str!("../../migrations/012_add_semester_year_to_lectures.sql"),
-            kind: MigrationKind::Up,
-        },
     ]
 }
 
