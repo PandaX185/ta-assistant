@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 interface SearchResult {
@@ -7,6 +8,9 @@ interface SearchResult {
   id: string;
   label: string;
   subtitle: string;
+  enrollment_id: string | null;
+  semester_year_id: string | null;
+  subject_id: string | null;
 }
 
 interface Props {
@@ -98,7 +102,7 @@ export function SpotlightSearch({ open, onClose, onSelect }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search students, subjects..."
+            placeholder="Search students..."
             className="border-0 shadow-none text-lg px-0 focus-visible:ring-0"
           />
         </div>
@@ -131,7 +135,7 @@ export function SpotlightSearch({ open, onClose, onSelect }: Props) {
                   }}
                   onMouseEnter={() => setSelectedIndex(i)}
                 >
-                  <span className="text-lg">{result.kind === "student" ? "👤" : "📚"}</span>
+                  <User className="w-4 h-4 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{result.label}</p>
                     <p className="text-xs text-muted-foreground truncate">{result.subtitle}</p>
@@ -143,7 +147,7 @@ export function SpotlightSearch({ open, onClose, onSelect }: Props) {
 
           {!query && (
             <div className="py-8 text-center text-muted-foreground text-sm">
-              Type to search students across all subjects or find subjects
+              Type to search students across all subjects
             </div>
           )}
         </div>

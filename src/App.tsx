@@ -6,6 +6,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { applyLocale } from "@/i18n";
 import { useLocaleStore } from "@/stores/locale-store";
 import { useUIStore } from "@/stores/ui-store";
+import { useFilterStore } from "@/stores/filter-store";
 import Shell from "@/components/layout/shell";
 import OnboardingWizard from "@/components/onboarding/wizard";
 import { SpotlightSearch } from "@/components/search/spotlight";
@@ -18,6 +19,8 @@ import Settings from "@/pages/settings";
 function AppContent() {
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
+  const { setSelectedSemesterYearId, setSelectedSubjectId, setPendingDetailEnrollmentId } =
+    useFilterStore();
 
   useEffect(() => {
     const unlisten = listen("toggle-search", () => {
@@ -45,9 +48,12 @@ function AppContent() {
         onClose={() => setShowSearch(false)}
         onSelect={(result) => {
           if (result.kind === "student") {
+            setSelectedSemesterYearId(result.semester_year_id);
+            setSelectedSubjectId(result.subject_id);
+            if (result.enrollment_id) {
+              setPendingDetailEnrollmentId(result.enrollment_id);
+            }
             navigate("/students");
-          } else if (result.kind === "subject") {
-            navigate("/grades");
           }
         }}
       />

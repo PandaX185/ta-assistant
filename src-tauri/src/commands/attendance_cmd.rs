@@ -176,7 +176,7 @@ pub fn seed_attendance(
     for enr_id in &ids {
         conn.execute(
             "INSERT INTO attendance (id, lecture_id, enrollment_id, status)
-             VALUES (?, ?, ?, 'Absent')",
+             VALUES (?, ?, ?, 'absent')",
             rusqlite::params![uuid::Uuid::new_v4().to_string(), lecture_id, enr_id],
         )
         .map_err(|e| format!("Insert attendance failed: {e}"))?;

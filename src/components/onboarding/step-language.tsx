@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Sun, Moon, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -30,8 +31,11 @@ export default function StepLanguage({ locale, theme, onChange }: Props) {
               : "border-border hover:border-muted-foreground/30",
           )}
         >
-          <span className="text-4xl">🇬🇧</span>
-          <span className="font-semibold">{t("onboarding.english")}</span>
+          <div className="flex flex-col items-center gap-3 p-2">
+            <Globe className="w-8 h-8" />
+            <span className="text-2xl font-bold">EN</span>
+            <span className="font-semibold">{t("onboarding.english")}</span>
+          </div>
         </button>
 
         <button
@@ -43,8 +47,11 @@ export default function StepLanguage({ locale, theme, onChange }: Props) {
               : "border-border hover:border-muted-foreground/30",
           )}
         >
-          <span className="text-4xl">🇸🇦</span>
-          <span className="font-semibold">{t("onboarding.arabic")}</span>
+          <div className="flex flex-col items-center gap-3 p-2">
+            <Globe className="w-8 h-8" />
+            <span className="text-2xl font-bold">AR</span>
+            <span className="font-semibold">{t("onboarding.arabic")}</span>
+          </div>
         </button>
       </div>
 
@@ -61,7 +68,7 @@ export default function StepLanguage({ locale, theme, onChange }: Props) {
                 : "border-border hover:border-muted-foreground/30",
             )}
           >
-            <span className="text-2xl">☀️</span>
+            <Sun className="w-6 h-6" />
             <span className="font-medium text-sm">{t("onboarding.light")}</span>
           </button>
 
@@ -74,7 +81,7 @@ export default function StepLanguage({ locale, theme, onChange }: Props) {
                 : "border-border hover:border-muted-foreground/30",
             )}
           >
-            <span className="text-2xl">🌙</span>
+            <Moon className="w-6 h-6" />
             <span className="font-medium text-sm">{t("onboarding.dark")}</span>
           </button>
         </div>

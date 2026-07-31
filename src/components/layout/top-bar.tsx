@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Moon, Sun, Globe } from "lucide-react";
+import { Moon, Sun, Globe } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui-store";
@@ -43,15 +43,6 @@ export default function TopBar() {
           title={locale === "en" ? "العربية" : "English"}
         >
           <Globe className="w-4 h-4" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          title={t("topbar.search_hint")}
-          disabled
-        >
-          <Search className="w-4 h-4" />
         </Button>
 
         <Button variant="ghost" size="icon" onClick={handleToggleTheme}>

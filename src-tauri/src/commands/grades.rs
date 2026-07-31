@@ -75,11 +75,11 @@ pub fn get_grades(
     // Same for assignments
     let mut acol = conn
         .prepare(
-            "SELECT DISTINCT a.name, a.max_score, a.date
+            "SELECT DISTINCT a.name, a.max_score, a.due_date
              FROM assignments a
              JOIN enrollments e ON e.id = a.enrollment_id
              WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
-             ORDER BY a.date, a.name",
+             ORDER BY a.due_date, a.name",
         )
         .map_err(|e| format!("Assignment columns query failed: {e}"))?;
 
@@ -169,10 +169,10 @@ pub fn get_grades(
         // Same for assignments
         let mut amap = conn
             .prepare(
-                "SELECT a.id, a.name, a.date, a.score
+                "SELECT a.id, a.name, a.due_date, a.score
                  FROM assignments a
                  WHERE a.enrollment_id = ?1
-                 ORDER BY a.date, a.name",
+                 ORDER BY a.due_date, a.name",
             )
             .map_err(|e| format!("Query failed: {e}"))?;
 
@@ -291,7 +291,7 @@ pub fn create_assignment_bulk(
 
     for enr_id in &ids {
         conn.execute(
-            "INSERT INTO assignments (id, enrollment_id, name, max_score, score, date)
+            "INSERT INTO assignments (id, enrollment_id, name, max_score, score, due_date)
              VALUES (?, ?, ?, ?, NULL, ?)",
             rusqlite::params![
                 uuid::Uuid::new_v4().to_string(),
@@ -385,7 +385,7 @@ pub fn delete_assignment_column(
             SELECT a.id FROM assignments a
             JOIN enrollments e ON e.id = a.enrollment_id
             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
-              AND a.name = ?3 AND a.date = ?4
+              AND a.name = ?3 AND a.due_date = ?4
         )",
         rusqlite::params![semester_year_id, subject_id, name, date],
     )

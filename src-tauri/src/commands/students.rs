@@ -217,7 +217,7 @@ pub fn get_student_detail(app: AppHandle, enrollment_id: String) -> Result<Stude
             "SELECT id, name, max_score, score
              FROM assignments
              WHERE enrollment_id = ?1
-             ORDER BY date, name",
+             ORDER BY due_date, name",
         )
         .map_err(|e| format!("Assignment query failed: {e}"))?;
 

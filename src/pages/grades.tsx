@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FileText, ClipboardPenLine } from "lucide-react";
 import { useFilterStore } from "@/stores/filter-store";
 
 interface GradeColumn {
@@ -60,10 +61,14 @@ export default function Grades() {
     new Date().toISOString().split("T")[0],
   );
 
+  // Tab view — column id
+  const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+
   // Inline edit state — which cell is being edited
   const [editing, setEditing] = useState<{
     type: "quiz" | "assignment";
     id: string;
+    maxScore: number;
   } | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -124,6 +129,7 @@ export default function Grades() {
     if (!editing) return;
     try {
       const parsed = editValue === "" ? null : parseFloat(editValue);
+      if (parsed !== null && parsed > editing.maxScore) return;
       if (editing.type === "quiz") {
         await invoke("update_quiz_score", { id: editing.id, score: parsed });
       } else {
@@ -262,212 +268,128 @@ export default function Grades() {
         </Dialog>
       </div>
 
-      <div className="space-y-8">
-        {/* Quizzes */}
-        {sheet.quizzes.length > 0 && (
-          <section>
-            <h2 className="text-lg font-semibold mb-3">Quizzes</h2>
-            <div className="border rounded-lg overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left px-3 py-2 whitespace-nowrap">Student</th>
-                    {sheet.quizzes.map((q) => (
-                      <th key={q.id} className="text-center px-3 py-2 whitespace-nowrap group">
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs font-medium">{q.name}</span>
-                          <span className="text-[10px] text-muted-foreground">/ {q.max_score}</span>
-                          <button
-                            className="text-[10px] text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleDeleteColumn("quiz", q.name, q.date)}
-                          >
-                            delete
-                          </button>
-                        </div>
-                      </th>
-                    ))}
-                    <th className="text-center px-3 py-2 text-xs text-muted-foreground">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sheet.students.map((student) => {
-                    const quizTotal = student.quiz_scores.reduce<number>((s, v) => s + (v ?? 0), 0);
-                    const quizMax = sheet.quizzes.reduce((s, q) => s + q.max_score, 0);
-                    return (
-                      <tr key={student.enrollment_id} className="border-t hover:bg-muted/20">
-                        <td className="px-3 py-2 whitespace-nowrap font-medium text-xs">
-                          {student.student_name}
-                        </td>
-                        {student.quiz_ids.map((id, qi) => (
-                          <td key={qi} className="text-center px-2 py-2">
-                            {editing?.type === "quiz" && editing.id === id ? (
-                              <Input
-                                type="number"
-                                step="0.5"
-                                className="w-16 h-7 text-xs text-center inline-block"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleSaveScore();
-                                  if (e.key === "Escape") setEditing(null);
-                                }}
-                                onBlur={() => {
-                                  // Save on blur too
-                                  if (editing) handleSaveScore();
-                                }}
-                                autoFocus
-                              />
-                            ) : id ? (
-                              <span
-                                className="cursor-pointer hover:bg-accent rounded px-1.5 py-0.5 inline-block min-w-[2rem] text-xs"
-                                onClick={() => {
-                                  const score = student.quiz_scores[qi];
-                                  setEditing({ type: "quiz", id });
-                                  setEditValue(score?.toString() ?? "");
-                                }}
-                              >
-                                {student.quiz_scores[qi] !== null && student.quiz_scores[qi] !== undefined
-                                  ? student.quiz_scores[qi]
-                                  : "—"}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
-                          </td>
-                        ))}
-                        <td className="text-center px-3 py-2 font-semibold text-xs">
-                          {quizTotal}/{quizMax}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+      {/* Tab bar — one tab per graded item */}
+      {(() => {
+        const allColumns = [
+          ...sheet.quizzes.map((q) => ({ ...q, type: "quiz" as const })),
+          ...sheet.assignments.map((a) => ({ ...a, type: "assignment" as const })),
+        ];
+        if (allColumns.length === 0) {
+          return (
+            <p className="text-sm text-muted-foreground">
+              No graded items yet. Click &ldquo;+ New Graded Item&rdquo; above.
+            </p>
+          );
+        }
+        if (!activeColumnId || !allColumns.some((c) => c.id === activeColumnId)) {
+          setTimeout(() => setActiveColumnId(allColumns[0].id));
+        }
+        return (
+          <div className="flex gap-1 border-b overflow-x-auto">
+            {allColumns.map((col) => (
+              <button
+                key={col.id}
+                className={`whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors ${
+                  activeColumnId === col.id
+                    ? "border-b-2 border-primary text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveColumnId(col.id)}
+              >
+                {col.type === "quiz" ? <FileText className="w-4 h-4 inline" /> : <ClipboardPenLine className="w-4 h-4 inline" />} {col.name}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Active column table — simple Student | Score */}
+      {(() => {
+        const allColumns = [
+          ...sheet.quizzes.map((q, i) => ({ ...q, type: "quiz" as const, index: i })),
+          ...sheet.assignments.map((a, i) => ({ ...a, type: "assignment" as const, index: i })),
+        ];
+        const active = allColumns.find((c) => c.id === activeColumnId);
+        if (!active) return null;
+
+        const getScore = active.type === "quiz"
+          ? (s: GradeStudent) => ({ score: s.quiz_scores[active.index], id: s.quiz_ids[active.index] })
+          : (s: GradeStudent) => ({ score: s.assignment_scores[active.index], id: s.assignment_ids[active.index] });
+
+        return (
+          <div className="border rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-muted/30 text-xs text-muted-foreground">
+              <span className="font-semibold">{active.name} · / {active.max_score}</span>
+              <button
+                className="text-destructive hover:underline"
+                onClick={() => handleDeleteColumn(active.type, active.name, active.date)}
+              >
+                delete this item
+              </button>
             </div>
-          </section>
-        )}
-
-        {/* Assignments */}
-        {sheet.assignments.length > 0 && (
-          <section>
-            <h2 className="text-lg font-semibold mb-3">Assignments</h2>
-            <div className="border rounded-lg overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left px-3 py-2 whitespace-nowrap">Student</th>
-                    {sheet.assignments.map((a) => (
-                      <th key={a.id} className="text-center px-3 py-2 whitespace-nowrap group">
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs font-medium">{a.name}</span>
-                          <span className="text-[10px] text-muted-foreground">/ {a.max_score}</span>
-                          <button
-                            className="text-[10px] text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleDeleteColumn("assignment", a.name, a.date)}
-                          >
-                            delete
-                          </button>
-                        </div>
-                      </th>
-                    ))}
-                    <th className="text-center px-3 py-2 text-xs text-muted-foreground">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sheet.students.map((student) => {
-                    const asgnTotal = student.assignment_scores.reduce<number>((s, v) => s + (v ?? 0), 0);
-                    const asgnMax = sheet.assignments.reduce((s, a) => s + a.max_score, 0);
-                    return (
-                      <tr key={student.enrollment_id} className="border-t hover:bg-muted/20">
-                        <td className="px-3 py-2 whitespace-nowrap font-medium text-xs">
-                          {student.student_name}
-                        </td>
-                        {student.assignment_ids.map((id, ai) => (
-                          <td key={ai} className="text-center px-2 py-2">
-                            {editing?.type === "assignment" && editing.id === id ? (
-                              <Input
-                                type="number"
-                                step="0.5"
-                                className="w-16 h-7 text-xs text-center inline-block"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleSaveScore();
-                                  if (e.key === "Escape") setEditing(null);
-                                }}
-                                onBlur={() => handleSaveScore()}
-                                autoFocus
-                              />
-                            ) : id ? (
-                              <span
-                                className="cursor-pointer hover:bg-accent rounded px-1.5 py-0.5 inline-block min-w-[2rem] text-xs"
-                                onClick={() => {
-                                  const score = student.assignment_scores[ai];
-                                  setEditing({ type: "assignment", id });
-                                  setEditValue(score?.toString() ?? "");
-                                }}
-                              >
-                                {student.assignment_scores[ai] !== null && student.assignment_scores[ai] !== undefined
-                                  ? student.assignment_scores[ai]
-                                  : "—"}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
-                          </td>
-                        ))}
-                        <td className="text-center px-3 py-2 font-semibold text-xs">
-                          {asgnTotal}/{asgnMax}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {sheet.quizzes.length === 0 && sheet.assignments.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No graded items yet. Click "+ New Graded Item" above.
-          </p>
-        )}
-
-        {/* Grand totals table */}
-        {(sheet.quizzes.length > 0 || sheet.assignments.length > 0) && (
-          <section className="border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left px-3 py-2 text-xs">Student</th>
-                  <th className="text-center px-3 py-2 text-xs">Quizzes</th>
-                  <th className="text-center px-3 py-2 text-xs">Assignments</th>
-                  <th className="text-center px-3 py-2 text-xs font-bold">Grand Total</th>
+                  <th className="text-left px-3 py-2">Student</th>
+                  <th className="text-center px-3 py-2">Score</th>
                 </tr>
               </thead>
               <tbody>
                 {sheet.students.map((student) => {
-                  const qTotal = student.quiz_scores.reduce<number>((s, v) => s + (v ?? 0), 0);
-                  const aTotal = student.assignment_scores.reduce<number>((s, v) => s + (v ?? 0), 0);
-                  const qMax = sheet.quizzes.reduce((s, q) => s + q.max_score, 0);
-                  const aMax = sheet.assignments.reduce((s, a) => s + a.max_score, 0);
+                  const { score, id } = getScore(student);
                   return (
-                    <tr key={student.enrollment_id} className="border-t">
-                      <td className="px-3 py-2 text-xs font-medium">{student.student_name}</td>
-                      <td className="text-center px-3 py-2 text-xs">{qTotal}/{qMax}</td>
-                      <td className="text-center px-3 py-2 text-xs">{aTotal}/{aMax}</td>
-                      <td className="text-center px-3 py-2 text-xs font-bold">
-                        {qTotal + aTotal}/{qMax + aMax}
+                    <tr key={student.enrollment_id} className="border-t hover:bg-muted/20">
+                      <td className="px-3 py-2 font-medium text-xs">
+                        {student.student_name}
+                      </td>
+                      <td className="text-center px-3 py-2">
+                        {id && editing?.id === id ? (
+                          <Input
+                            type="number"
+                            step="0.5"
+                            max={editing.maxScore}
+                            className="w-20 h-7 text-xs text-center inline-block"
+                            value={editValue}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const num = parseFloat(val);
+                              if (editing && !isNaN(num) && num > editing.maxScore) {
+                                setEditValue(editing.maxScore.toString());
+                              } else {
+                                setEditValue(val);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveScore();
+                              if (e.key === "Escape") setEditing(null);
+                            }}
+                            onBlur={() => {
+                              if (editing) handleSaveScore();
+                            }}
+                            autoFocus
+                          />
+                        ) : id ? (
+                          <span
+                            className="cursor-pointer hover:bg-accent rounded px-2 py-0.5 inline-block min-w-[2.5rem] text-xs"
+                            onClick={() => {
+                              setEditing({ type: active.type, id, maxScore: active.max_score });
+                              setEditValue(score?.toString() ?? "");
+                            }}
+                          >
+                            {score !== null && score !== undefined ? score : "—"}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </section>
-        )}
-      </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

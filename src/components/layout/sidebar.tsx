@@ -22,8 +22,8 @@ export default function Sidebar() {
 
   return (
     <aside className="w-16 border-r bg-card flex flex-col items-center py-4 gap-2">
-      <div className="text-lg font-bold mb-4" title="TA Assistant">
-        🐼
+      <div className="text-base font-bold mb-4 tracking-tight" title="TA Assistant">
+        TA
       </div>
       {navItems.map((item) => (
         <NavLink

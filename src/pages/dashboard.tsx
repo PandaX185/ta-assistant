@@ -156,7 +156,7 @@ export default function Dashboard() {
             <CardTitle className="text-sm">Getting Started</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground space-y-2">
-            <p>✅ {stats.enrolled_students} students enrolled</p>
+            <p>{stats.enrolled_students} students enrolled</p>
             {stats.quiz_count === 0 && stats.assignment_count === 0 && (
               <p>→ Go to <span className="font-medium">Grades</span> to create quizzes and assignments</p>
             )}

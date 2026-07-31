@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Users, ClipboardList } from "lucide-react";
 import { useFilterStore } from "@/stores/filter-store";
 import { StudentDetailDialog } from "@/components/students/student-detail-dialog";
 
@@ -40,6 +41,8 @@ export default function Students() {
     selectedSemesterYearId,
     selectedSubjectId,
     subjects,
+    pendingDetailEnrollmentId,
+    setPendingDetailEnrollmentId,
   } = useFilterStore();
 
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
@@ -54,6 +57,14 @@ export default function Students() {
 
   // Detail dialog
   const [detailEnrollmentId, setDetailEnrollmentId] = useState<string | null>(null);
+
+  // Pick up pending detail from spotlight search
+  useEffect(() => {
+    if (pendingDetailEnrollmentId) {
+      setDetailEnrollmentId(pendingDetailEnrollmentId);
+      setPendingDetailEnrollmentId(null);
+    }
+  }, [pendingDetailEnrollmentId, setPendingDetailEnrollmentId]);
 
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<{ studentId: string; name: string } | null>(null);
@@ -151,7 +162,7 @@ export default function Students() {
   if (!selectedSemesterYearId || !selectedSubjectId) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <p className="text-4xl mb-4">👥</p>
+        <Users className="w-12 h-12 mb-4 text-muted-foreground" />
         <h2 className="text-xl font-semibold mb-2">Select a Subject</h2>
         <p className="text-muted-foreground max-w-md">
           Choose a semester/year and subject from the filter bar to view enrolled students.
@@ -244,7 +255,7 @@ export default function Students() {
       {/* Student table */}
       {filtered.length === 0 ? (
         <div className="text-center py-16 border rounded-lg">
-          <p className="text-3xl mb-3">📋</p>
+          <ClipboardList className="w-10 h-10 mb-3 text-muted-foreground mx-auto" />
           <p className="text-muted-foreground">
             {search
               ? "No students match your search."

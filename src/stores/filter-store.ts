@@ -23,6 +23,8 @@ export interface FilterState {
   loadData: () => Promise<void>;
   setSelectedSemesterYearId: (id: string | null) => void;
   setSelectedSubjectId: (id: string | null) => void;
+  pendingDetailEnrollmentId: string | null;
+  setPendingDetailEnrollmentId: (id: string | null) => void;
 }
 
 export const useFilterStore = create<FilterState>((set) => ({
@@ -48,6 +50,8 @@ export const useFilterStore = create<FilterState>((set) => ({
     }
   },
 
+  pendingDetailEnrollmentId: null,
   setSelectedSemesterYearId: (id) => set({ selectedSemesterYearId: id }),
   setSelectedSubjectId: (id) => set({ selectedSubjectId: id }),
+  setPendingDetailEnrollmentId: (id) => set({ pendingDetailEnrollmentId: id }),
 }));

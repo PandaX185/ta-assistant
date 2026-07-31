@@ -12,7 +12,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-
 import { useFilterStore } from "@/stores/filter-store";
 
 interface Lecture {
@@ -31,7 +30,7 @@ interface AttendanceRecord {
   status: string;
 }
 
-const STATUSES = ["Present", "Absent", "Excused"] as const;
+
 
 export default function Attendance() {
   const { t } = useTranslation();
@@ -111,32 +110,12 @@ export default function Attendance() {
     }
   };
 
-  const handleSeedAttendance = async (lectureId: string) => {
-    if (!selectedSemesterYearId || !selectedSubjectId) return;
-    try {
-      await invoke("seed_attendance", {
-        lectureId,
-        semesterYearId: selectedSemesterYearId,
-        subjectId: selectedSubjectId,
-      });
-      loadAttendance(lectureId);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
-  const handleMark = async (
-    lectureId: string,
-    enrollmentId: string,
-    status: string,
-  ) => {
+
+  const handleToggle = async (lectureId: string, enrollmentId: string, currentlyPresent: boolean) => {
+    const status = currentlyPresent ? "absent" : "present";
     try {
-      await invoke("mark_attendance", {
-        lectureId,
-        enrollmentId,
-        status,
-      });
-      // Update local state immediately
+      await invoke("mark_attendance", { lectureId, enrollmentId, status });
       setAttendance((prev) =>
         prev.map((a) =>
           a.enrollment_id === enrollmentId ? { ...a, status } : a,
@@ -164,11 +143,36 @@ export default function Attendance() {
 
   const selectAndLoad = (lecture: Lecture) => {
     setSelectedLecture(lecture);
-    // Check if attendance has been seeded
     loadAttendance(lecture.id).then(() => {
-      // Do nothing extra — the effect handles it
+      // Auto-seed if empty
+      loadLectures();
     });
   };
+
+  // Auto-seed attendance when records are empty after loading
+  useEffect(() => {
+    if (
+      selectedLecture &&
+      attendance.length === 0 &&
+      !loading &&
+      selectedSemesterYearId &&
+      selectedSubjectId
+    ) {
+      const seedAndReload = async () => {
+        try {
+          await invoke("seed_attendance", {
+            lectureId: selectedLecture.id,
+            semesterYearId: selectedSemesterYearId,
+            subjectId: selectedSubjectId,
+          });
+          loadAttendance(selectedLecture.id);
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      seedAndReload();
+    }
+  }, [selectedLecture, attendance, loading, selectedSemesterYearId, selectedSubjectId, loadAttendance]);
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
 
@@ -274,74 +278,59 @@ export default function Attendance() {
           </div>
         </div>
 
-        {/* Attendance roster */}
+        {/* Attendance roster — simple checkbox list */}
         <div className="md:col-span-2 border rounded-lg overflow-hidden">
-          <div className="bg-muted/50 px-3 py-2 text-sm font-medium border-b flex items-center justify-between">
+          <div className="bg-muted/50 px-3 py-2 text-sm font-medium border-b">
             <span>
               {selectedLecture
-                ? `${selectedLecture.date} — Roster`
+                ? `${selectedLecture.date} — Students`
                 : "Select a lecture"}
             </span>
-            {selectedLecture && attendance.length === 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => handleSeedAttendance(selectedLecture.id)}
-              >
-                Load roster
-              </Button>
-            )}
           </div>
 
           {!selectedLecture ? (
             <p className="text-xs text-muted-foreground p-6 text-center">
-              Select a lecture from the left to manage attendance.
+              Select a lecture from the left.
             </p>
           ) : loading ? (
             <p className="text-xs text-muted-foreground p-6 text-center animate-pulse">
               Loading...
             </p>
           ) : attendance.length === 0 ? (
-            <p className="text-xs text-muted-foreground p-6 text-center">
-              No attendance records yet. Click "Load roster" to seed from
-              enrolled students.
+            <p className="text-xs text-muted-foreground p-6 text-center animate-pulse">
+              Loading roster...
             </p>
           ) : (
             <div className="divide-y">
-              {attendance.map((record) => (
-                <div
-                  key={record.id}
-                  className="flex items-center justify-between px-4 py-2.5 hover:bg-muted/20"
-                >
-                  <span className="text-sm">{record.student_name}</span>
-                  <div className="flex gap-1">
-                    {STATUSES.map((status) => (
-                      <button
-                        key={status}
-                        onClick={() =>
-                          handleMark(
-                            selectedLecture.id,
-                            record.enrollment_id,
-                            status,
-                          )
-                        }
-                        className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                          record.status === status
-                            ? status === "Present"
-                              ? "bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300"
-                              : status === "Absent"
-                                ? "bg-red-100 border-red-300 text-red-800 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300"
-                                : "bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-700 dark:text-yellow-300"
-                            : "bg-background border-border text-muted-foreground hover:bg-accent"
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              {attendance.map((record) => {
+                const present = record.status === "present";
+                return (
+                  <label
+                    key={record.id}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/20 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={present}
+                      onChange={() =>
+                        handleToggle(
+                          selectedLecture.id,
+                          record.enrollment_id,
+                          present,
+                        )
+                      }
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span
+                      className={`text-sm ${
+                        present ? "font-medium" : "text-muted-foreground"
+                      }`}
+                    >
+                      {record.student_name}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           )}
         </div>
