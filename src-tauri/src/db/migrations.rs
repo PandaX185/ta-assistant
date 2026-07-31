@@ -69,6 +69,12 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/011_add_theme_to_preferences.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 12,
+            description: "add student_id to students",
+            sql: include_str!("../../migrations/012_add_student_id.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
