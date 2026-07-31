@@ -1,43 +1,34 @@
-# TA Assistant 🐼
+# TA Assistant
 
-> A local-first desktop app for university teaching assistants.
-> Track students, grades, attendance, and bonuses — all offline, all yours.
+A local-first desktop app for university teaching assistants. Track students, grades, and attendance — fully offline, no cloud, no account.
 
-**Stack:** Tauri 2 + React + TypeScript + SQLite + Tailwind + shadcn/ui
+**Stack:** Tauri 2 · React 19 · TypeScript · SQLite · Tailwind CSS · shadcn/ui
 
 ## Features
 
-- 📚 **Subjects & Semesters** — Organize by year/semester/subject with a global filter
-- 👥 **Student Management** — Add students, search instantly across all data
-- 📝 **Grading** — Quizzes, assignments with max scores and per-student grades
-- 🪑 **Attendance** — Lecture-based rosters with present/absent/late/excused tracking
-- ➕ **Bonuses/Minuses** — Quick adjustments with reason logging
-- 📊 **Total Marks** — Auto-calculated sum of all grades + bonuses
-- 🔍 **Global Spotlight Search** — `Ctrl+Shift+P` to find any student instantly
-- 🌐 **Fully Localized** — English and Arabic (RTL) with more to come
-- 📋 **Excel Export** — Formatted xlsx with styling and auto-calculated totals
-- 🔒 **Local-First & Private** — Your data never leaves your machine
-- 🌙 **Dark Mode** — Because TAs work at night too
+- **Subjects & Semesters** — organize everything by year → semester → subject with a persistent global filter bar
+- **Students** — enroll, edit, and inspect students; detail view shows grades and attendance history
+- **Spotlight Search** — `Ctrl+Shift+P` to find any student; selecting one jumps straight to their detail view
+- **Grading** — quizzes and assignments with max scores; one tab per item with inline score editing capped at the max
+- **Attendance** — lecture-based checklists; select a lecture and tick the students who showed up
+- **Localization** — English and Arabic (RTL)
+- **Dark Mode** — because TAs work at night too
+- **Local-First & Private** — all data stays in a local SQLite file on your machine
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v20+
-- [Rust](https://rustup.rs/) (latest stable)
+- [Node.js](https://nodejs.org/) 20+
+- [Rust](https://rustup.rs/) (stable)
 - [Tauri CLI](https://v2.tauri.app/start/cli/)
 
 ### Development
 
 ```bash
-# Clone
 git clone https://github.com/PandaX185/ta-assistant.git
 cd ta-assistant
-
-# Install frontend deps
 npm install
-
-# Run in dev mode
 npm run tauri dev
 ```
 
@@ -47,44 +38,36 @@ npm run tauri dev
 npm run tauri build
 ```
 
-Output binaries will be in `src-tauri/target/release/bundle/`.
+Bundles land in `src-tauri/target/release/bundle/`.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Desktop | Tauri 2 |
-| Frontend | React 19 + TypeScript |
-| Styling | Tailwind CSS + shadcn/ui |
-| Database | SQLite (via tauri-plugin-sql) |
-| i18n | react-i18next (ar/en) |
-| Excel | rust_xlsxwriter |
-| State | Zustand |
+| Layer       | Technology                        |
+| ----------- | --------------------------------- |
+| Desktop     | Tauri 2                           |
+| Frontend    | React 19 + TypeScript             |
+| Styling     | Tailwind CSS + shadcn/ui          |
+| Database    | SQLite via rusqlite (bundled)     |
+| State       | Zustand                           |
+| i18n        | react-i18next (en/ar)             |
 
-## Screenshots
+## Security
 
-> Coming soon — app is under active development.
-
-## Roadmap
-
-See [plan/brain-ta-assistant.md](plan/brain-ta-assistant.md) for the full design document and development roadmap.
+- The app is password-gated at first launch; the password is hashed with **Argon2** and never stored in plaintext
+- There is **no recovery option** — losing the password means resetting the app data
+- All data is stored locally; nothing is transmitted anywhere
 
 ## Contributing
 
-Contributions are welcome! This project aims to be useful for TAs everywhere.
+Contributions are welcome.
 
 1. Fork the repo
 2. Create a feature branch (`git checkout -b feat/amazing-feature`)
 3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feat/amazing-feature`)
-5. Open a Pull Request
+4. Push and open a Pull Request
 
-Please follow [conventional commits](https://www.conventionalcommits.org/) and ensure linting passes.
+Please use [conventional commits](https://www.conventionalcommits.org/) and ensure the TypeScript and Rust builds pass.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
-
-## Author
-
-Built by [Abdullah (PandaX185)](https://github.com/PandaX185) for TAs who deserve better tools.
+MIT — see [LICENSE](LICENSE).
