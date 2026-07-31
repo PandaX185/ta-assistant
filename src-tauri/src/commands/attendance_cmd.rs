@@ -7,7 +7,7 @@ pub struct LectureWithAttendance {
     pub subject_id: String,
     pub semester_year_id: Option<String>,
     pub date: String,
-    pub description: Option<String>,
+    pub title: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -28,7 +28,7 @@ pub fn get_lectures(
     let conn = crate::db::open_db(&app)?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, subject_id, semester_year_id, date, description
+            "SELECT id, subject_id, semester_year_id, date, title
              FROM lectures
              WHERE subject_id = ?1 AND (semester_year_id IS NULL OR semester_year_id = ?2)
              ORDER BY date DESC",
@@ -42,7 +42,7 @@ pub fn get_lectures(
                 subject_id: row.get(1)?,
                 semester_year_id: row.get(2)?,
                 date: row.get(3)?,
-                description: row.get(4)?,
+                title: row.get(4)?,
             })
         })
         .map_err(|e| format!("Query failed: {e}"))?;
@@ -60,18 +60,18 @@ pub fn create_lecture(
     subject_id: String,
     semester_year_id: String,
     date: String,
-    description: Option<String>,
+    title: Option<String>,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
     conn.execute(
-        "INSERT INTO lectures (id, subject_id, semester_year_id, date, description)
+        "INSERT INTO lectures (id, subject_id, semester_year_id, date, title)
          VALUES (?, ?, ?, ?, ?)",
         rusqlite::params![
             uuid::Uuid::new_v4().to_string(),
             subject_id,
             semester_year_id,
             date,
-            description,
+            title,
         ],
     )
     .map_err(|e| format!("Create lecture failed: {e}"))?;

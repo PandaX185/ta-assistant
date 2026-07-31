@@ -20,7 +20,7 @@ interface Lecture {
   subject_id: string;
   semester_year_id: string | null;
   date: string;
-  description: string | null;
+  title: string | null;
 }
 
 interface AttendanceRecord {
@@ -100,7 +100,7 @@ export default function Attendance() {
         subjectId: selectedSubjectId,
         semesterYearId: selectedSemesterYearId,
         date: createDate,
-        description: createDesc || null,
+        title: createDesc || null,
       });
       setCreateOpen(false);
       setCreateDate(new Date().toISOString().split("T")[0]);
@@ -217,7 +217,7 @@ export default function Attendance() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lec-desc">
-                  Description / Topic (optional)
+                  Topic (optional)
                 </Label>
                 <Input
                   id="lec-desc"
@@ -255,9 +255,9 @@ export default function Attendance() {
                 onClick={() => selectAndLoad(lec)}
               >
                 <div className="text-sm font-medium">{lec.date}</div>
-                {lec.description && (
+                {lec.title && (
                   <div className="text-xs text-muted-foreground truncate">
-                    {lec.description}
+                    {lec.title}
                   </div>
                 )}
                 <button
