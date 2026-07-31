@@ -28,6 +28,15 @@ pub fn run() {
             commands::students::get_enrollments,
             commands::students::create_enrollment,
             commands::students::delete_enrollment,
+            commands::grades::get_grades,
+            commands::grades::create_quiz_bulk,
+            commands::grades::create_assignment_bulk,
+            commands::grades::update_quiz_score,
+            commands::grades::update_assignment_score,
+            commands::grades::delete_quiz,
+            commands::grades::delete_assignment,
+            commands::grades::delete_quiz_column,
+            commands::grades::delete_assignment_column,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
