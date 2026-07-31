@@ -118,16 +118,29 @@ export default function Students() {
           email: email || null,
           studentId: studentId || null,
         });
+        resetForm();
+        setOpen(false);
       } else {
-        await invoke("create_student", {
+        // Create student
+        const newStudentId = await invoke<string>("create_student", {
           name,
           email: email || null,
           studentId: studentId || null,
         });
+        // Auto-enroll if filters are active
+        if (selectedSemesterYearId && selectedSubjectId) {
+          await invoke("create_enrollment", {
+            studentId: newStudentId,
+            semesterYearId: selectedSemesterYearId,
+            subjectId: selectedSubjectId,
+          });
+        }
+        resetForm();
+        setOpen(false);
+        loadStudents();
+        loadEnrollments();
+        return;
       }
-      resetForm();
-      setOpen(false);
-      loadStudents();
     } catch (e) {
       console.error(e);
     }
@@ -230,6 +243,11 @@ export default function Students() {
                   onChange={(e) => setStudentId(e.target.value)}
                 />
               </div>
+              {!editId && selectedSemesterYearId && selectedSubjectId && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Will also enroll in <span className="font-medium">{selectedSubject?.name}</span>
+                </p>
+              )}
               <Button onClick={handleSave} className="w-full">
                 {editId ? "Update" : "Create"}
               </Button>

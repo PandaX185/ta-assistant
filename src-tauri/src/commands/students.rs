@@ -45,14 +45,15 @@ pub fn get_students(app: AppHandle) -> Result<Vec<Student>, String> {
 }
 
 #[tauri::command]
-pub fn create_student(app: AppHandle, name: String, email: Option<String>, student_id: Option<String>) -> Result<(), String> {
+pub fn create_student(app: AppHandle, name: String, email: Option<String>, student_id: Option<String>) -> Result<String, String> {
     let conn = crate::db::open_db(&app)?;
+    let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO students (id, name, email, student_id) VALUES (?, ?, ?, ?)",
-        rusqlite::params![uuid::Uuid::new_v4().to_string(), name, email, student_id],
+        rusqlite::params![id, name, email, student_id],
     )
     .map_err(|e| format!("Create student failed: {e}"))?;
-    Ok(())
+    Ok(id)
 }
 
 #[tauri::command]
