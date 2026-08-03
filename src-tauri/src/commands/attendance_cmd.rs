@@ -239,7 +239,14 @@ mod tests {
     fn seeded_conn() -> (Connection, String, String) {
         let conn = test_utils::test_conn();
         let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
-        create_lecture_impl(&conn, sub.clone(), sy.clone(), "2026-02-01".into(), Some("Intro".into())).unwrap();
+        create_lecture_impl(
+            &conn,
+            sub.clone(),
+            sy.clone(),
+            "2026-02-01".into(),
+            Some("Intro".into()),
+        )
+        .unwrap();
         create_lecture_impl(&conn, sub.clone(), sy.clone(), "2026-02-08".into(), None).unwrap();
         (conn, sy, sub)
     }

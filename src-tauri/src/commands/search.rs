@@ -90,8 +90,11 @@ mod tests {
         let conn = test_utils::test_conn();
         let (_sy, _sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
         // Bob gets a student code; Alice doesn't
-        conn.execute("UPDATE students SET student_id = '2026-0042' WHERE id = 'stu-b'", [])
-            .unwrap();
+        conn.execute(
+            "UPDATE students SET student_id = '2026-0042' WHERE id = 'stu-b'",
+            [],
+        )
+        .unwrap();
         // unenrolled student should never appear
         test_utils::seed_student(&conn, "stu-ghost", "Ghost");
         conn

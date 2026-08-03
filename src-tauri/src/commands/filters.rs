@@ -179,8 +179,13 @@ mod tests {
         create_semester_year_impl(&conn, 2025, "Spring".into()).unwrap();
         create_semester_year_impl(&conn, 2026, "Fall".into()).unwrap();
         create_semester_year_impl(&conn, 2026, "Summer".into()).unwrap();
-        create_subject_impl(&conn, "Zebra".into(), Some("ZEB".into()), Some("#fff".into()))
-            .unwrap();
+        create_subject_impl(
+            &conn,
+            "Zebra".into(),
+            Some("ZEB".into()),
+            Some("#fff".into()),
+        )
+        .unwrap();
         create_subject_impl(&conn, "Alpha".into(), None, None).unwrap();
         conn
     }
@@ -195,7 +200,10 @@ mod tests {
     fn semester_years_ordered_year_desc_then_semester() {
         let conn = seeded_conn();
         let years = get_semester_years_impl(&conn).unwrap();
-        let labels: Vec<(i64, &str)> = years.iter().map(|s| (s.year, s.semester.as_str())).collect();
+        let labels: Vec<(i64, &str)> = years
+            .iter()
+            .map(|s| (s.year, s.semester.as_str()))
+            .collect();
         assert_eq!(
             labels,
             vec![(2026, "Fall"), (2026, "Summer"), (2025, "Spring")]

@@ -17,15 +17,6 @@ pub fn test_conn() -> Connection {
     conn
 }
 
-pub fn seed_preferences(conn: &Connection) {
-    conn.execute(
-        "INSERT INTO preferences (id, name, email, password, locale, theme, global_shortcut)
-         VALUES (1, 'Test User', 'test@example.com', 'not-a-real-hash', 'en', 'light', 'Ctrl+Shift+P')",
-        [],
-    )
-    .expect("seed preferences");
-}
-
 pub fn seed_semester(conn: &Connection, id: &str, year: i64, semester: &str) {
     conn.execute(
         "INSERT INTO semester_years (id, year, semester) VALUES (?1, ?2, ?3)",
@@ -78,5 +69,10 @@ pub fn seed_basic_scenario(conn: &Connection) -> (String, String, String, String
     seed_student(conn, b, "Bob");
     seed_enrollment(conn, "enr-a", a, sy, sub);
     seed_enrollment(conn, "enr-b", b, sy, sub);
-    (sy.to_string(), sub.to_string(), a.to_string(), b.to_string())
+    (
+        sy.to_string(),
+        sub.to_string(),
+        a.to_string(),
+        b.to_string(),
+    )
 }

@@ -381,8 +381,13 @@ mod tests {
     #[test]
     fn create_student_returns_id_and_appears_in_list() {
         let conn = test_utils::test_conn();
-        let id = create_student_impl(&conn, "Alice".into(), Some("a@x.com".into()), Some("123".into()))
-            .unwrap();
+        let id = create_student_impl(
+            &conn,
+            "Alice".into(),
+            Some("a@x.com".into()),
+            Some("123".into()),
+        )
+        .unwrap();
         let students = get_students_impl(&conn).unwrap();
         assert_eq!(students.len(), 1);
         assert_eq!(students[0].id, id);
@@ -405,8 +410,19 @@ mod tests {
     fn update_student_changes_fields() {
         let conn = test_utils::test_conn();
         let id = create_student_impl(&conn, "Bob".into(), None, None).unwrap();
-        update_student_impl(&conn, id.clone(), "Robert".into(), Some("b@x.com".into()), Some("9".into())).unwrap();
-        let s = get_students_impl(&conn).unwrap().into_iter().find(|s| s.id == id).unwrap();
+        update_student_impl(
+            &conn,
+            id.clone(),
+            "Robert".into(),
+            Some("b@x.com".into()),
+            Some("9".into()),
+        )
+        .unwrap();
+        let s = get_students_impl(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|s| s.id == id)
+            .unwrap();
         assert_eq!(s.name, "Robert");
         assert_eq!(s.email.as_deref(), Some("b@x.com"));
         assert_eq!(s.student_id.as_deref(), Some("9"));
@@ -435,7 +451,9 @@ mod tests {
 
         let enr = get_enrollments_impl(&conn, sy.clone(), sub.clone()).unwrap();
         assert_eq!(enr.len(), 3);
-        assert!(enr.iter().all(|e| e.semester_year_id == sy && e.subject_id == sub));
+        assert!(enr
+            .iter()
+            .all(|e| e.semester_year_id == sy && e.subject_id == sub));
         let names: Vec<&str> = enr.iter().map(|e| e.student_name.as_str()).collect();
         assert_eq!(names, vec!["Alice", "Bob", "Charlie"]);
     }
