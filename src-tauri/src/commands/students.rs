@@ -1,3 +1,4 @@
+use rusqlite::Connection;
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -67,6 +68,10 @@ pub struct StudentDetail {
 #[tauri::command]
 pub fn get_students(app: AppHandle) -> Result<Vec<Student>, String> {
     let conn = crate::db::open_db(&app)?;
+    get_students_impl(&conn)
+}
+
+fn get_students_impl(conn: &Connection) -> Result<Vec<Student>, String> {
     let mut stmt = conn
         .prepare("SELECT id, name, email, student_id FROM students ORDER BY name")
         .map_err(|e| format!("Query prepare failed: {e}"))?;
@@ -97,6 +102,15 @@ pub fn create_student(
     student_id: Option<String>,
 ) -> Result<String, String> {
     let conn = crate::db::open_db(&app)?;
+    create_student_impl(&conn, name, email, student_id)
+}
+
+fn create_student_impl(
+    conn: &Connection,
+    name: String,
+    email: Option<String>,
+    student_id: Option<String>,
+) -> Result<String, String> {
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO students (id, name, email, student_id) VALUES (?, ?, ?, ?)",
@@ -115,6 +129,16 @@ pub fn update_student(
     student_id: Option<String>,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
+    update_student_impl(&conn, id, name, email, student_id)
+}
+
+fn update_student_impl(
+    conn: &Connection,
+    id: String,
+    name: String,
+    email: Option<String>,
+    student_id: Option<String>,
+) -> Result<(), String> {
     conn.execute(
         "UPDATE students SET name = ?1, email = ?2, student_id = ?3 WHERE id = ?4",
         rusqlite::params![name, email, student_id, id],
@@ -126,6 +150,10 @@ pub fn update_student(
 #[tauri::command]
 pub fn delete_student(app: AppHandle, id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
+    delete_student_impl(&conn, id)
+}
+
+fn delete_student_impl(conn: &Connection, id: String) -> Result<(), String> {
     conn.execute("DELETE FROM students WHERE id = ?1", rusqlite::params![id])
         .map_err(|e| format!("Delete student failed: {e}"))?;
     Ok(())
@@ -138,6 +166,14 @@ pub fn get_enrollments(
     subject_id: String,
 ) -> Result<Vec<Enrollment>, String> {
     let conn = crate::db::open_db(&app)?;
+    get_enrollments_impl(&conn, semester_year_id, subject_id)
+}
+
+fn get_enrollments_impl(
+    conn: &Connection,
+    semester_year_id: String,
+    subject_id: String,
+) -> Result<Vec<Enrollment>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT e.id, e.student_id, e.semester_year_id, e.subject_id, s.name, s.student_id
@@ -176,6 +212,15 @@ pub fn create_enrollment(
     subject_id: String,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
+    create_enrollment_impl(&conn, student_id, semester_year_id, subject_id)
+}
+
+fn create_enrollment_impl(
+    conn: &Connection,
+    student_id: String,
+    semester_year_id: String,
+    subject_id: String,
+) -> Result<(), String> {
     conn.execute(
         "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id) VALUES (?, ?, ?, ?)",
         rusqlite::params![uuid::Uuid::new_v4().to_string(), student_id, semester_year_id, subject_id],
@@ -187,6 +232,10 @@ pub fn create_enrollment(
 #[tauri::command]
 pub fn delete_enrollment(app: AppHandle, id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
+    delete_enrollment_impl(&conn, id)
+}
+
+fn delete_enrollment_impl(conn: &Connection, id: String) -> Result<(), String> {
     conn.execute(
         "DELETE FROM enrollments WHERE id = ?1",
         rusqlite::params![id],
@@ -198,7 +247,13 @@ pub fn delete_enrollment(app: AppHandle, id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn get_student_detail(app: AppHandle, enrollment_id: String) -> Result<StudentDetail, String> {
     let conn = crate::db::open_db(&app)?;
+    get_student_detail_impl(&conn, enrollment_id)
+}
 
+fn get_student_detail_impl(
+    conn: &Connection,
+    enrollment_id: String,
+) -> Result<StudentDetail, String> {
     // Get student info
     let (student_id, student_name, student_code, student_email) = conn
         .query_row(
@@ -316,4 +371,147 @@ pub fn get_student_detail(app: AppHandle, enrollment_id: String) -> Result<Stude
         attendance,
         bonuses,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::test_utils;
+
+    #[test]
+    fn create_student_returns_id_and_appears_in_list() {
+        let conn = test_utils::test_conn();
+        let id = create_student_impl(&conn, "Alice".into(), Some("a@x.com".into()), Some("123".into()))
+            .unwrap();
+        let students = get_students_impl(&conn).unwrap();
+        assert_eq!(students.len(), 1);
+        assert_eq!(students[0].id, id);
+        assert_eq!(students[0].name, "Alice");
+        assert_eq!(students[0].email.as_deref(), Some("a@x.com"));
+        assert_eq!(students[0].student_id.as_deref(), Some("123"));
+    }
+
+    #[test]
+    fn students_ordered_by_name() {
+        let conn = test_utils::test_conn();
+        create_student_impl(&conn, "Zoe".into(), None, None).unwrap();
+        create_student_impl(&conn, "Anna".into(), None, None).unwrap();
+        let students = get_students_impl(&conn).unwrap();
+        let names: Vec<&str> = students.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["Anna", "Zoe"]);
+    }
+
+    #[test]
+    fn update_student_changes_fields() {
+        let conn = test_utils::test_conn();
+        let id = create_student_impl(&conn, "Bob".into(), None, None).unwrap();
+        update_student_impl(&conn, id.clone(), "Robert".into(), Some("b@x.com".into()), Some("9".into())).unwrap();
+        let s = get_students_impl(&conn).unwrap().into_iter().find(|s| s.id == id).unwrap();
+        assert_eq!(s.name, "Robert");
+        assert_eq!(s.email.as_deref(), Some("b@x.com"));
+        assert_eq!(s.student_id.as_deref(), Some("9"));
+    }
+
+    #[test]
+    fn delete_student_cascades_enrollments() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, a, _b) = test_utils::seed_basic_scenario(&conn);
+        delete_student_impl(&conn, a).unwrap();
+        let enr = get_enrollments_impl(&conn, sy, sub).unwrap();
+        // Alice's enrollment cascaded away; Bob's remains
+        assert_eq!(enr.len(), 1);
+        assert_eq!(enr[0].student_name, "Bob");
+    }
+
+    #[test]
+    fn get_enrollments_joins_student_and_filters() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        test_utils::seed_student(&conn, "stu-c", "Charlie");
+        test_utils::seed_enrollment(&conn, "enr-c", "stu-c", &sy, &sub);
+        // enrollment in another semester should be excluded
+        test_utils::seed_semester(&conn, "sy-2", 2025, "Spring");
+        test_utils::seed_enrollment(&conn, "enr-d", "stu-c", "sy-2", &sub);
+
+        let enr = get_enrollments_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        assert_eq!(enr.len(), 3);
+        assert!(enr.iter().all(|e| e.semester_year_id == sy && e.subject_id == sub));
+        let names: Vec<&str> = enr.iter().map(|e| e.student_name.as_str()).collect();
+        assert_eq!(names, vec!["Alice", "Bob", "Charlie"]);
+    }
+
+    #[test]
+    fn create_enrollment_rejects_duplicate() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, a, _b) = test_utils::seed_basic_scenario(&conn);
+        let err = create_enrollment_impl(&conn, a, sy, sub).unwrap_err();
+        assert!(err.contains("Create enrollment failed"), "{err}");
+    }
+
+    #[test]
+    fn delete_enrollment_removes_row() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        delete_enrollment_impl(&conn, "enr-a".into()).unwrap();
+        assert_eq!(get_enrollments_impl(&conn, sy, sub).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn get_student_detail_aggregates_all_data() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        conn.execute(
+            "INSERT INTO quizzes (id, enrollment_id, name, max_score, score, date) VALUES ('q1', 'enr-a', 'Quiz 1', 10, 8.5, '2026-01-01')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO assignments (id, enrollment_id, name, max_score, score, due_date) VALUES ('a1', 'enr-a', 'HW 1', 5, 4.0, '2026-01-05')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO lectures (id, subject_id, semester_year_id, title, date) VALUES ('l1', ?1, ?2, 'Intro', '2026-02-01')",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO attendance (id, lecture_id, enrollment_id, status) VALUES ('att1', 'l1', 'enr-a', 'present')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO bonuses (id, enrollment_id, value, reason, date) VALUES ('b1', 'enr-a', 1.0, 'Participation', '2026-02-02')",
+            [],
+        )
+        .unwrap();
+
+        let d = get_student_detail_impl(&conn, "enr-a".into()).unwrap();
+        assert_eq!(d.student_name, "Alice");
+        assert_eq!(d.student_id, "stu-a");
+        assert_eq!(d.quizzes.len(), 1);
+        assert_eq!(d.quizzes[0].name, "Quiz 1");
+        assert_eq!(d.quizzes[0].max_score, 10.0);
+        assert_eq!(d.quizzes[0].score, Some(8.5));
+        assert_eq!(d.assignments.len(), 1);
+        assert_eq!(d.assignments[0].score, Some(4.0));
+        assert_eq!(d.attendance.len(), 1);
+        assert_eq!(d.attendance[0].status, "present");
+        assert_eq!(d.attendance[0].lecture_title.as_deref(), Some("Intro"));
+        assert_eq!(d.bonuses.len(), 1);
+        assert_eq!(d.bonuses[0].value, 1.0);
+        assert_eq!(d.bonuses[0].reason, "Participation");
+    }
+
+    #[test]
+    fn get_student_detail_empty_when_no_data() {
+        let conn = test_utils::test_conn();
+        let (_sy, _sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        let d = get_student_detail_impl(&conn, "enr-a".into()).unwrap();
+        assert!(d.quizzes.is_empty());
+        assert!(d.assignments.is_empty());
+        assert!(d.attendance.is_empty());
+        assert!(d.bonuses.is_empty());
+        assert_eq!(d.student_name, "Alice");
+    }
 }

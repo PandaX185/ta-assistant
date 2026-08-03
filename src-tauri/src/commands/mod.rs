@@ -4,3 +4,6 @@ pub mod grades;
 pub mod preferences;
 pub mod search;
 pub mod students;
+
+#[cfg(test)]
+pub mod test_utils;

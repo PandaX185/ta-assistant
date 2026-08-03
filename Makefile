@@ -1,6 +1,6 @@
 # TA Assistant
 
-.PHONY: all install dev build lint check clean
+.PHONY: all install dev build lint check test test-rust test-frontend clean
 
 # ─── Default ───────────────────────────────────────────
 all: install
@@ -25,6 +25,15 @@ lint:
 check:
 	npx tsc --noEmit
 
+# ─── Test ───────────────────────────────────────────────
+test: test-rust test-frontend
+
+test-rust:
+	cd src-tauri && cargo test
+
+test-frontend:
+	npm run test
+
 # ─── Clean ──────────────────────────────────────────────
 clean:
 	rm -rf node_modules/ dist/ src-tauri/target/
@@ -44,4 +53,7 @@ help:
 	@echo "  make build      Build for production"
 	@echo "  make lint       Run Rust clippy"
 	@echo "  make check      TypeScript type checking"
+	@echo "  make test       Run all tests (Rust + frontend)"
+	@echo "  make test-rust  Run Rust unit tests"
+	@echo "  make test-frontend  Run frontend unit tests"
 	@echo "  make clean      Remove all build artifacts"

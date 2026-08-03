@@ -1,3 +1,4 @@
+use rusqlite::Connection;
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -15,6 +16,10 @@ pub struct SearchResult {
 #[tauri::command]
 pub fn global_search(app: AppHandle, query: String) -> Result<Vec<SearchResult>, String> {
     let conn = crate::db::open_db(&app)?;
+    global_search_impl(&conn, query)
+}
+
+fn global_search_impl(conn: &Connection, query: String) -> Result<Vec<SearchResult>, String> {
     let mut results = Vec::new();
     let pattern = format!("%{}%", query);
 
@@ -74,4 +79,92 @@ pub fn global_search(app: AppHandle, query: String) -> Result<Vec<SearchResult>,
     }
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::test_utils;
+
+    fn seeded_conn() -> Connection {
+        let conn = test_utils::test_conn();
+        let (_sy, _sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        // Bob gets a student code; Alice doesn't
+        conn.execute("UPDATE students SET student_id = '2026-0042' WHERE id = 'stu-b'", [])
+            .unwrap();
+        // unenrolled student should never appear
+        test_utils::seed_student(&conn, "stu-ghost", "Ghost");
+        conn
+    }
+
+    #[test]
+    fn empty_query_returns_all_enrolled() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "".into()).unwrap();
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0].label, "Alice");
+        assert_eq!(res[1].label, "Bob");
+        assert!(res.iter().all(|r| r.kind == "student"));
+    }
+
+    #[test]
+    fn matches_name_case_insensitively() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "ALI".into()).unwrap();
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].label, "Alice");
+    }
+
+    #[test]
+    fn matches_student_id() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "0042".into()).unwrap();
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].label, "Bob");
+    }
+
+    #[test]
+    fn subtitle_contains_subject_semester_and_code() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "Bob".into()).unwrap();
+        // real format: "<subject> · <semester> <year> · " + " · <code>" when code exists
+        assert_eq!(res[0].subtitle, "Databases · Fall 2026 ·  · 2026-0042");
+        assert_eq!(res[0].enrollment_id.as_deref(), Some("enr-b"));
+        assert_eq!(res[0].semester_year_id.as_deref(), Some("sy-1"));
+        assert_eq!(res[0].subject_id.as_deref(), Some("sub-1"));
+    }
+
+    #[test]
+    fn subtitle_omits_code_when_missing() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "Alice".into()).unwrap();
+        assert_eq!(res[0].subtitle, "Databases · Fall 2026 · ");
+    }
+
+    #[test]
+    fn no_match_returns_empty() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "zzz-nonexistent".into()).unwrap();
+        assert!(res.is_empty());
+    }
+
+    #[test]
+    fn unenrolled_students_never_appear() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "Ghost".into()).unwrap();
+        assert!(res.is_empty());
+    }
+
+    #[test]
+    fn results_capped_at_20() {
+        let conn = seeded_conn();
+        test_utils::seed_subject(&conn, "sub-2", "Networks");
+        for i in 0..25 {
+            let sid = format!("bulk-{i}");
+            test_utils::seed_student(&conn, &sid, &format!("Bulk Student {i:02}"));
+            test_utils::seed_enrollment(&conn, &format!("enr-{i}"), &sid, "sy-1", "sub-2");
+        }
+        let res = global_search_impl(&conn, "Bulk".into()).unwrap();
+        assert_eq!(res.len(), 20);
+    }
 }
