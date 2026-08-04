@@ -75,6 +75,24 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/012_add_student_id.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 13,
+            description: "create sections table",
+            sql: include_str!("../../migrations/013_create_sections.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 14,
+            description: "add section_id to enrollments and lectures",
+            sql: include_str!("../../migrations/014_add_section_to_enrollments_lectures.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 15,
+            description: "rebuild lectures/enrollments with per-section uniqueness",
+            sql: include_str!("../../migrations/015_rebuild_lectures_enrollments_uniques.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -103,14 +121,26 @@ pub fn run_pending(conn: &Connection) -> Result<(), String> {
 
     let all = get_migrations();
 
+    // Some migrations rebuild tables (DROP TABLE + RENAME). With foreign keys
+    // enabled, dropping a parent table implicitly DELETEs its rows, which fires
+    // ON DELETE CASCADE on children (e.g. DROP TABLE lectures wipes attendance).
+    // Toggle FK enforcement off for the duration of each migration batch and
+    // restore the prior state afterwards (data is copied 1:1, so integrity holds).
+    let fk_was_on: bool = conn
+        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+        .map_err(|e| format!("Failed to read foreign_keys pragma: {e}"))?;
+    let restore = if fk_was_on { "ON" } else { "OFF" };
+
     for migration in &all {
         if applied.contains(&migration.version) {
             continue; // already applied
         }
 
-        // Run the migration in its own transaction
+        // Run the migration in its own transaction.
+        // PRAGMA foreign_keys is a no-op inside a transaction, so it must sit
+        // outside the BEGIN/COMMIT pair.
         conn.execute_batch(&format!(
-            "BEGIN TRANSACTION; {}; INSERT INTO _schema_migrations (version) VALUES ({}); COMMIT;",
+            "PRAGMA foreign_keys = OFF; BEGIN TRANSACTION; {}; INSERT INTO _schema_migrations (version) VALUES ({}); COMMIT; PRAGMA foreign_keys = {restore};",
             migration.sql, migration.version
         ))
         .map_err(|e| {
@@ -122,4 +152,65 @@ pub fn run_pending(conn: &Connection) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::commands::test_utils;
+
+    /// Migration 015 rebuilds lectures/enrollments with per-section uniqueness:
+    /// - one student row can enroll in two sections of the same subject
+    /// - two sections can hold lectures on the same date
+    /// - duplicates within a section are still rejected
+    #[test]
+    fn per_section_uniqueness_after_migrations() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+
+        // second section (seed_section hardcodes the name "Group A", so insert directly)
+        conn.execute(
+            "INSERT INTO sections (id, subject_id, semester_year_id, name, color)
+             VALUES ('sec-2', ?1, ?2, 'Group B', NULL)",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+
+        // same student may enroll in a second section of the same subject+semester
+        conn.execute(
+            "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id)
+             VALUES ('enr-a2', 'stu-a', ?1, ?2, 'sec-2')",
+            rusqlite::params![sy, sub],
+        )
+        .unwrap();
+        // ...but duplicating within the same section still fails
+        assert!(conn
+            .execute(
+                "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id)
+                 VALUES ('enr-a3', 'stu-a', ?1, ?2, 'sec-1')",
+                rusqlite::params![sy, sub],
+            )
+            .is_err());
+
+        // two sections may hold lectures on the same date
+        conn.execute(
+            "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date)
+             VALUES ('lec-1', ?1, ?2, 'sec-1', NULL, '2026-09-01')",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date)
+             VALUES ('lec-2', ?1, ?2, 'sec-2', NULL, '2026-09-01')",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        // ...but the same section cannot double-book a date
+        assert!(conn
+            .execute(
+                "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date)
+                 VALUES ('lec-3', ?1, ?2, 'sec-1', NULL, '2026-09-01')",
+                rusqlite::params![sub, sy],
+            )
+            .is_err());
+    }
 }

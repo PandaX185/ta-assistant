@@ -164,37 +164,42 @@ pub fn get_enrollments(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<Vec<Enrollment>, String> {
     let conn = crate::db::open_db(&app)?;
-    get_enrollments_impl(&conn, semester_year_id, subject_id)
+    get_enrollments_impl(&conn, semester_year_id, subject_id, section_id)
 }
 
 fn get_enrollments_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<Vec<Enrollment>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT e.id, e.student_id, e.semester_year_id, e.subject_id, s.name, s.student_id
              FROM enrollments e
              JOIN students s ON s.id = e.student_id
-             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
+             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2 AND e.section_id = ?3
              ORDER BY s.name",
         )
         .map_err(|e| format!("Query prepare failed: {e}"))?;
 
     let rows = stmt
-        .query_map(rusqlite::params![semester_year_id, subject_id], |row| {
-            Ok(Enrollment {
-                id: row.get(0)?,
-                student_id: row.get(1)?,
-                semester_year_id: row.get(2)?,
-                subject_id: row.get(3)?,
-                student_name: row.get(4)?,
-                student_code: row.get(5)?,
-            })
-        })
+        .query_map(
+            rusqlite::params![semester_year_id, subject_id, section_id],
+            |row| {
+                Ok(Enrollment {
+                    id: row.get(0)?,
+                    student_id: row.get(1)?,
+                    semester_year_id: row.get(2)?,
+                    subject_id: row.get(3)?,
+                    student_name: row.get(4)?,
+                    student_code: row.get(5)?,
+                })
+            },
+        )
         .map_err(|e| format!("Query failed: {e}"))?;
 
     let mut result = Vec::new();
@@ -210,9 +215,10 @@ pub fn create_enrollment(
     student_id: String,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    create_enrollment_impl(&conn, student_id, semester_year_id, subject_id)
+    create_enrollment_impl(&conn, student_id, semester_year_id, subject_id, section_id)
 }
 
 fn create_enrollment_impl(
@@ -220,10 +226,17 @@ fn create_enrollment_impl(
     student_id: String,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id) VALUES (?, ?, ?, ?)",
-        rusqlite::params![uuid::Uuid::new_v4().to_string(), student_id, semester_year_id, subject_id],
+        "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id) VALUES (?, ?, ?, ?, ?)",
+        rusqlite::params![
+            uuid::Uuid::new_v4().to_string(),
+            student_id,
+            semester_year_id,
+            subject_id,
+            section_id
+        ],
     )
     .map_err(|e| format!("Create enrollment failed: {e}"))?;
     Ok(())
@@ -373,6 +386,44 @@ fn get_student_detail_impl(
     })
 }
 
+/// Fuzzy-match existing students by name or student_id (case-insensitive partial).
+/// Used by the find-or-create picker to reuse existing students instead of duplicating.
+#[tauri::command]
+pub fn find_students(app: AppHandle, query: String) -> Result<Vec<Student>, String> {
+    let conn = crate::db::open_db(&app)?;
+    find_students_impl(&conn, &query)
+}
+
+fn find_students_impl(conn: &Connection, query: &str) -> Result<Vec<Student>, String> {
+    let q = query.trim();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let like = format!("%{}%", q.to_lowercase());
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, email, student_id FROM students
+             WHERE lower(name) LIKE ?1 OR lower(coalesce(student_id, '')) LIKE ?1
+             ORDER BY name LIMIT 20",
+        )
+        .map_err(|e| format!("Query prepare failed: {e}"))?;
+    let rows = stmt
+        .query_map(rusqlite::params![like], |row| {
+            Ok(Student {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                email: row.get(2)?,
+                student_id: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Query failed: {e}"))?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| format!("Row failed: {e}"))?);
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -432,8 +483,9 @@ mod tests {
     fn delete_student_cascades_enrollments() {
         let conn = test_utils::test_conn();
         let (sy, sub, a, _b) = test_utils::seed_basic_scenario(&conn);
+        test_utils::seed_section(&conn, "sec-1", &sy, &sub);
         delete_student_impl(&conn, a).unwrap();
-        let enr = get_enrollments_impl(&conn, sy, sub).unwrap();
+        let enr = get_enrollments_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         // Alice's enrollment cascaded away; Bob's remains
         assert_eq!(enr.len(), 1);
         assert_eq!(enr[0].student_name, "Bob");
@@ -448,8 +500,10 @@ mod tests {
         // enrollment in another semester should be excluded
         test_utils::seed_semester(&conn, "sy-2", 2025, "Spring");
         test_utils::seed_enrollment(&conn, "enr-d", "stu-c", "sy-2", &sub);
+        // assign every NULL-section enrollment to the default section
+        test_utils::seed_section(&conn, "sec-1", &sy, &sub);
 
-        let enr = get_enrollments_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let enr = get_enrollments_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         assert_eq!(enr.len(), 3);
         assert!(enr
             .iter()
@@ -462,7 +516,7 @@ mod tests {
     fn create_enrollment_rejects_duplicate() {
         let conn = test_utils::test_conn();
         let (sy, sub, a, _b) = test_utils::seed_basic_scenario(&conn);
-        let err = create_enrollment_impl(&conn, a, sy, sub).unwrap_err();
+        let err = create_enrollment_impl(&conn, a, sy, sub, "sec-1".into()).unwrap_err();
         assert!(err.contains("Create enrollment failed"), "{err}");
     }
 
@@ -470,8 +524,14 @@ mod tests {
     fn delete_enrollment_removes_row() {
         let conn = test_utils::test_conn();
         let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        test_utils::seed_section(&conn, "sec-1", &sy, &sub);
         delete_enrollment_impl(&conn, "enr-a".into()).unwrap();
-        assert_eq!(get_enrollments_impl(&conn, sy, sub).unwrap().len(), 1);
+        assert_eq!(
+            get_enrollments_impl(&conn, sy, sub, "sec-1".into())
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -531,5 +591,41 @@ mod tests {
         assert!(d.attendance.is_empty());
         assert!(d.bonuses.is_empty());
         assert_eq!(d.student_name, "Alice");
+    }
+
+    #[test]
+    fn find_students_matches_name_partial_and_case_insensitive() {
+        let conn = test_utils::test_conn();
+        create_student_impl(&conn, "Ahmed Khalil".into(), None, Some("2026-0042".into())).unwrap();
+        create_student_impl(&conn, "Sara Omar".into(), None, Some("2026-0099".into())).unwrap();
+
+        let hits = find_students_impl(&conn, "ahmed").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].name, "Ahmed Khalil");
+        assert_eq!(hits[0].student_id.as_deref(), Some("2026-0042"));
+
+        // partial middle-of-name match
+        let hits = find_students_impl(&conn, "omar").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].name, "Sara Omar");
+    }
+
+    #[test]
+    fn find_students_matches_student_id_partial() {
+        let conn = test_utils::test_conn();
+        create_student_impl(&conn, "Ahmed Khalil".into(), None, Some("2026-0042".into())).unwrap();
+        create_student_impl(&conn, "Sara Omar".into(), None, Some("2026-0099".into())).unwrap();
+
+        let hits = find_students_impl(&conn, "0042").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].name, "Ahmed Khalil");
+    }
+
+    #[test]
+    fn find_students_empty_query_returns_nothing() {
+        let conn = test_utils::test_conn();
+        create_student_impl(&conn, "Alice".into(), None, None).unwrap();
+        assert!(find_students_impl(&conn, "").unwrap().is_empty());
+        assert!(find_students_impl(&conn, "   ").unwrap().is_empty());
     }
 }

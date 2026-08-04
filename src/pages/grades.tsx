@@ -46,8 +46,13 @@ interface GradeSheet {
 
 export default function Grades() {
   const { t } = useTranslation();
-  const { selectedSemesterYearId, selectedSubjectId, subjects } =
-    useFilterStore();
+  const {
+    selectedSemesterYearId,
+    selectedSubjectId,
+    selectedSectionId,
+    sections,
+    subjects,
+  } = useFilterStore();
 
   const [sheet, setSheet] = useState<GradeSheet | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,7 +78,7 @@ export default function Grades() {
   const [editValue, setEditValue] = useState("");
 
   const loadGrades = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId) {
+    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
       setSheet(null);
       return;
     }
@@ -82,6 +87,7 @@ export default function Grades() {
       const data = await invoke<GradeSheet>("get_grades", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
       });
       setSheet(data);
     } catch (e) {
@@ -89,20 +95,27 @@ export default function Grades() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSemesterYearId, selectedSubjectId]);
+  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
 
   useEffect(() => {
     loadGrades();
   }, [loadGrades]);
 
   const handleCreate = async () => {
-    if (!createName || !createMax || !selectedSemesterYearId || !selectedSubjectId)
+    if (
+      !createName ||
+      !createMax ||
+      !selectedSemesterYearId ||
+      !selectedSubjectId ||
+      !selectedSectionId
+    )
       return;
     try {
       if (createType === "quiz") {
         await invoke("create_quiz_bulk", {
           semesterYearId: selectedSemesterYearId,
           subjectId: selectedSubjectId,
+          sectionId: selectedSectionId,
           name: createName,
           maxScore: parseFloat(createMax),
           date: createDate,
@@ -111,6 +124,7 @@ export default function Grades() {
         await invoke("create_assignment_bulk", {
           semesterYearId: selectedSemesterYearId,
           subjectId: selectedSubjectId,
+          sectionId: selectedSectionId,
           name: createName,
           maxScore: parseFloat(createMax),
           date: createDate,
@@ -148,6 +162,7 @@ export default function Grades() {
       await invoke(type === "quiz" ? "delete_quiz_column" : "delete_assignment_column", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
         name: colName,
         date: colDate,
       });
@@ -158,8 +173,9 @@ export default function Grades() {
   };
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
+  const selectedSection = sections.find((s) => s.id === selectedSectionId);
 
-  if (!selectedSemesterYearId || !selectedSubjectId) {
+  if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">{t("grades.title")}</h1>
@@ -172,7 +188,10 @@ export default function Grades() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">{t("grades.title")}</h1>
-        <p className="text-sm text-muted-foreground">{selectedSubject?.name}</p>
+        <p className="text-sm text-muted-foreground">
+          {selectedSubject?.name}
+          {selectedSection && ` · ${selectedSection.name}`}
+        </p>
         <p className="text-muted-foreground animate-pulse">Loading...</p>
       </div>
     );
@@ -184,7 +203,10 @@ export default function Grades() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">{t("grades.title")}</h1>
-            <p className="text-sm text-muted-foreground">{selectedSubject?.name}</p>
+            <p className="text-sm text-muted-foreground">
+              {selectedSubject?.name}
+              {selectedSection && ` · ${selectedSection.name}`}
+            </p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -200,7 +222,9 @@ export default function Grades() {
         <div>
           <h1 className="text-2xl font-bold">{t("grades.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            {selectedSubject?.name} · {sheet.students.length} enrolled
+            {selectedSubject?.name}
+            {selectedSection && ` · ${selectedSection.name}`} ·{" "}
+            {sheet.students.length} enrolled
           </p>
         </div>
 

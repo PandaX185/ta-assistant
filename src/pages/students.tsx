@@ -35,11 +35,20 @@ interface StudentEnrollment {
   student_code: string | null;
 }
 
+interface StudentMatch {
+  id: string;
+  name: string;
+  email: string | null;
+  student_id: string | null;
+}
+
 export default function Students() {
   const { t } = useTranslation();
   const {
     selectedSemesterYearId,
     selectedSubjectId,
+    selectedSectionId,
+    sections,
     subjects,
     pendingDetailEnrollmentId,
     setPendingDetailEnrollmentId,
@@ -54,6 +63,8 @@ export default function Students() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [studentId, setStudentId] = useState("");
+  // find-or-create matches shown before creating a new student
+  const [matches, setMatches] = useState<StudentMatch[]>([]);
 
   // Detail dialog
   const [detailEnrollmentId, setDetailEnrollmentId] = useState<string | null>(null);
@@ -70,7 +81,7 @@ export default function Students() {
   const [deleteTarget, setDeleteTarget] = useState<{ studentId: string; name: string } | null>(null);
 
   const loadEnrollments = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId) {
+    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
       setEnrollments([]);
       return;
     }
@@ -78,12 +89,13 @@ export default function Students() {
       const data = await invoke<StudentEnrollment[]>("get_enrollments", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
       });
       setEnrollments(data);
     } catch (e) {
       console.error(e);
     }
-  }, [selectedSemesterYearId, selectedSubjectId]);
+  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
 
   useEffect(() => {
     loadEnrollments();
@@ -94,13 +106,54 @@ export default function Students() {
     setEmail("");
     setStudentId("");
     setEditId(null);
+    setMatches([]);
   };
 
   const openEdit = (enr: StudentEnrollment) => {
     setEditId(enr.student_id);
     setName(enr.student_name);
     setStudentId(enr.student_code ?? "");
+    setMatches([]);
     setOpen(true);
+  };
+
+  const createNewStudent = async () => {
+    const newStudentId = await invoke<string>("create_student", {
+      name,
+      email: email || null,
+      studentId: studentId || null,
+    });
+    if (selectedSemesterYearId && selectedSubjectId && selectedSectionId) {
+      await invoke("create_enrollment", {
+        studentId: newStudentId,
+        semesterYearId: selectedSemesterYearId,
+        subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
+      });
+    }
+    setMatches([]);
+    resetForm();
+    setOpen(false);
+    loadEnrollments();
+  };
+
+  const useExistingStudent = async (existingId: string) => {
+    try {
+      if (selectedSemesterYearId && selectedSubjectId && selectedSectionId) {
+        await invoke("create_enrollment", {
+          studentId: existingId,
+          semesterYearId: selectedSemesterYearId,
+          subjectId: selectedSubjectId,
+          sectionId: selectedSectionId,
+        });
+      }
+      setMatches([]);
+      resetForm();
+      setOpen(false);
+      loadEnrollments();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleSave = async () => {
@@ -113,23 +166,22 @@ export default function Students() {
           email: email || null,
           studentId: studentId || null,
         });
-      } else {
-        const newStudentId = await invoke<string>("create_student", {
-          name,
-          email: email || null,
-          studentId: studentId || null,
+        resetForm();
+        setOpen(false);
+        loadEnrollments();
+        return;
+      }
+      // find-or-create: dedupe on the university ID before creating a new student
+      if (studentId.trim()) {
+        const found = await invoke<StudentMatch[]>("find_students", {
+          query: studentId.trim(),
         });
-        if (selectedSemesterYearId && selectedSubjectId) {
-          await invoke("create_enrollment", {
-            studentId: newStudentId,
-            semesterYearId: selectedSemesterYearId,
-            subjectId: selectedSubjectId,
-          });
+        if (found.length > 0) {
+          setMatches(found);
+          return; // show picker; do not create yet
         }
       }
-      resetForm();
-      setOpen(false);
-      loadEnrollments();
+      await createNewStudent();
     } catch (e) {
       console.error(e);
     }
@@ -149,6 +201,9 @@ export default function Students() {
   const selectedSubject = subjects.find(
     (s) => s.id === selectedSubjectId,
   );
+  const selectedSection = sections.find(
+    (s) => s.id === selectedSectionId,
+  );
 
   const filtered = search
     ? enrollments.filter(
@@ -159,13 +214,13 @@ export default function Students() {
     : enrollments;
 
   // No filter → empty state
-  if (!selectedSemesterYearId || !selectedSubjectId) {
+  if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <Users className="w-12 h-12 mb-4 text-muted-foreground" />
-        <h2 className="text-xl font-semibold mb-2">Select a Subject</h2>
+        <h2 className="text-xl font-semibold mb-2">Select a Section</h2>
         <p className="text-muted-foreground max-w-md">
-          Choose a semester/year and subject from the filter bar to view enrolled students.
+          Choose a semester/year, subject, and section from the filter bar to view enrolled students.
         </p>
       </div>
     );
@@ -203,7 +258,10 @@ export default function Students() {
                   id="s-name"
                   placeholder="Student name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setMatches([]);
+                  }}
                 />
               </div>
               <div className="space-y-2">
@@ -222,13 +280,56 @@ export default function Students() {
                   id="s-id"
                   placeholder="e.g. 2024001"
                   value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
+                  onChange={(e) => {
+                    setStudentId(e.target.value);
+                    setMatches([]);
+                  }}
                 />
               </div>
               {!editId && (
                 <p className="text-xs text-muted-foreground text-center">
                   Will be enrolled in <span className="font-medium">{selectedSubject?.name}</span>
+                  {selectedSection && (
+                    <> · <span className="font-medium">{selectedSection.name}</span></>
+                  )}
                 </p>
+              )}
+              {!editId && matches.length > 0 && (
+                <div className="border rounded-lg divide-y">
+                  <p className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                    Existing student{matches.length !== 1 ? "s" : ""} found — reuse instead of duplicating?
+                  </p>
+                  {matches.map((m) => (
+                    <div key={m.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{m.name}</p>
+                        <p className="text-xs text-muted-foreground font-mono truncate">
+                          {m.student_id ?? "—"}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => useExistingStudent(m.id)}
+                      >
+                        Use existing
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="px-3 py-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full text-muted-foreground"
+                      onClick={() => {
+                        setMatches([]);
+                        createNewStudent();
+                      }}
+                    >
+                      Create new anyway
+                    </Button>
+                  </div>
+                </div>
               )}
               <Button onClick={handleSave} className="w-full">
                 {editId ? "Update" : "Create"}

@@ -7,25 +7,41 @@ import FilterBar from "./filter-bar";
 
 const semesterYears = [{ id: "2", year: 2026, semester: "Fall" }];
 const subjects = [{ id: "3", name: "Databases", code: "DB", color: null }];
+const sections = [
+  { id: "sec-1", subject_id: "3", semester_year_id: "2", name: "Group A", color: null },
+];
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
   useFilterStore.setState({
     semesterYears: [],
     subjects: [],
+    sections: [],
     selectedSemesterYearId: null,
     selectedSubjectId: null,
+    selectedSectionId: null,
     loaded: false,
   });
 });
 
+function mockDefaults(overrides?: {
+  sections?: typeof sections;
+  semesterYears?: typeof semesterYears;
+  subjects?: typeof subjects;
+}) {
+  const { sections: secs = [], semesterYears: sys = semesterYears, subjects: subs = subjects } =
+    overrides ?? {};
+  vi.mocked(invoke).mockImplementation((cmd: string) => {
+    if (cmd === "get_semester_years") return Promise.resolve(sys);
+    if (cmd === "get_subjects") return Promise.resolve(subs);
+    if (cmd === "get_sections") return Promise.resolve(secs);
+    return Promise.resolve([]);
+  });
+}
+
 describe("FilterBar", () => {
   it("loads filter data on mount when not loaded yet", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_semester_years") return Promise.resolve(semesterYears);
-      if (cmd === "get_subjects") return Promise.resolve(subjects);
-      return Promise.resolve([]);
-    });
+    mockDefaults();
 
     render(<FilterBar />);
 
@@ -40,11 +56,7 @@ describe("FilterBar", () => {
   });
 
   it("renders semester and subject selects with their values", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_semester_years") return Promise.resolve(semesterYears);
-      if (cmd === "get_subjects") return Promise.resolve(subjects);
-      return Promise.resolve([]);
-    });
+    mockDefaults();
 
     render(<FilterBar />);
 
@@ -67,12 +79,50 @@ describe("FilterBar", () => {
     expect(useFilterStore.getState().selectedSubjectId).toBe("3");
   });
 
-  it("shows placeholder items when there is no data", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_semester_years") return Promise.resolve([]);
-      if (cmd === "get_subjects") return Promise.resolve([]);
-      return Promise.resolve([]);
+  it("loads and auto-selects the section when only one exists", async () => {
+    mockDefaults({ sections });
+
+    render(<FilterBar />);
+
+    await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("combobox")[0]);
+    await user.click(await screen.findByRole("option", { name: "2026 Fall" }));
+    await user.click(screen.getAllByRole("combobox")[1]);
+    await user.click(await screen.findByRole("option", { name: "[DB] Databases" }));
+
+    // Section dropdown appears once semester + subject are set, and the
+    // single section is auto-selected
+    await waitFor(() => {
+      expect(useFilterStore.getState().sections).toEqual(sections);
+      expect(useFilterStore.getState().selectedSectionId).toBe("sec-1");
     });
+    expect(screen.getByText("Group A")).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("get_sections", {
+      semesterYearId: "2",
+      subjectId: "3",
+    });
+  });
+
+  it("shows section placeholder when semester+subject have no sections", async () => {
+    mockDefaults({ sections: [] });
+
+    render(<FilterBar />);
+    await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("combobox")[0]);
+    await user.click(await screen.findByRole("option", { name: "2026 Fall" }));
+    await user.click(screen.getAllByRole("combobox")[1]);
+    await user.click(await screen.findByRole("option", { name: "[DB] Databases" }));
+
+    await user.click(screen.getAllByRole("combobox")[2]);
+    expect(await screen.findByText("No sections yet")).toBeInTheDocument();
+  });
+
+  it("shows placeholder items when there is no data", async () => {
+    mockDefaults({ semesterYears: [], subjects: [] });
 
     render(<FilterBar />);
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));

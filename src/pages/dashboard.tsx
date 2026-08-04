@@ -13,13 +13,19 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { t } = useTranslation();
-  const { selectedSemesterYearId, selectedSubjectId, subjects, semesterYears } =
-    useFilterStore();
+  const {
+    selectedSemesterYearId,
+    selectedSubjectId,
+    selectedSectionId,
+    sections,
+    subjects,
+    semesterYears,
+  } = useFilterStore();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   const loadStats = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId) {
+    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
       setStats(null);
       return;
     }
@@ -28,18 +34,21 @@ export default function Dashboard() {
       const enrollments = await invoke<any[]>("get_enrollments", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
       });
 
       // Get grades
       const grades = await invoke<any>("get_grades", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
       });
 
       // Get lectures
       const lectures = await invoke<any[]>("get_lectures", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
       });
 
       setStats({
@@ -51,18 +60,19 @@ export default function Dashboard() {
     } catch (e) {
       console.error(e);
     }
-  }, [selectedSemesterYearId, selectedSubjectId]);
+  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
 
   useEffect(() => {
     loadStats();
   }, [loadStats]);
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
+  const selectedSection = sections.find((s) => s.id === selectedSectionId);
   const selectedSemester = semesterYears.find(
     (sy) => sy.id === selectedSemesterYearId,
   );
 
-  if (!selectedSemesterYearId || !selectedSubjectId) {
+  if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">{t("dashboard.title")}</h1>
@@ -83,6 +93,7 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold">{t("dashboard.title")}</h1>
         <p className="text-sm text-muted-foreground">
           {selectedSubject?.name}
+          {selectedSection && ` · ${selectedSection.name}`}
           {selectedSemester && ` · ${selectedSemester.semester} ${selectedSemester.year}`}
         </p>
       </div>

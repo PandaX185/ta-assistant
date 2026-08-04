@@ -3,6 +3,7 @@ pub mod filters;
 pub mod grades;
 pub mod preferences;
 pub mod search;
+pub mod sections;
 pub mod students;
 
 #[cfg(test)]

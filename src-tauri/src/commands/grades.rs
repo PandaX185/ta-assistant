@@ -33,32 +33,34 @@ pub fn get_grades(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<GradeSheet, String> {
     let conn = crate::db::open_db(&app)?;
-    get_grades_impl(&conn, semester_year_id, subject_id)
+    get_grades_impl(&conn, semester_year_id, subject_id, section_id)
 }
 
 fn get_grades_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<GradeSheet, String> {
     use rusqlite::params;
 
-    // Get all quizzes (distinct names) for this subject+semester
+    // Get all quizzes (distinct names) for this subject+semester+section
     let mut qcol = conn
         .prepare(
             "SELECT DISTINCT q.name, q.max_score, q.date
              FROM quizzes q
              JOIN enrollments e ON e.id = q.enrollment_id
-             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
+             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2 AND e.section_id = ?3
              ORDER BY q.date, q.name",
         )
         .map_err(|e| format!("Quiz columns query failed: {e}"))?;
 
     let mut quiz_columns: Vec<GradeColumn> = Vec::new();
     let qrows = qcol
-        .query_map(params![semester_year_id, subject_id], |row| {
+        .query_map(params![semester_year_id, subject_id, section_id], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, f64>(1)?,
@@ -87,14 +89,14 @@ fn get_grades_impl(
             "SELECT DISTINCT a.name, a.max_score, a.due_date
              FROM assignments a
              JOIN enrollments e ON e.id = a.enrollment_id
-             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
+             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2 AND e.section_id = ?3
              ORDER BY a.due_date, a.name",
         )
         .map_err(|e| format!("Assignment columns query failed: {e}"))?;
 
     let mut assignment_columns: Vec<GradeColumn> = Vec::new();
     let arows = acol
-        .query_map(params![semester_year_id, subject_id], |row| {
+        .query_map(params![semester_year_id, subject_id, section_id], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, f64>(1)?,
@@ -116,19 +118,19 @@ fn get_grades_impl(
         }
     }
 
-    // Get enrollments for this subject+semester
+    // Get enrollments for this subject+semester+section
     let mut estmt = conn
         .prepare(
             "SELECT e.id, s.name, s.student_id
              FROM enrollments e
              JOIN students s ON s.id = e.student_id
-             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
+             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2 AND e.section_id = ?3
              ORDER BY s.name",
         )
         .map_err(|e| format!("Enrollments query failed: {e}"))?;
 
     let enrollments: Vec<(String, String, Option<String>)> = estmt
-        .query_map(params![semester_year_id, subject_id], |row| {
+        .query_map(params![semester_year_id, subject_id, section_id], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })
         .map_err(|e| format!("Query failed: {e}"))?
@@ -234,31 +236,42 @@ pub fn create_quiz_bulk(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     max_score: f64,
     date: String,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    create_quiz_bulk_impl(&conn, semester_year_id, subject_id, name, max_score, date)
+    create_quiz_bulk_impl(
+        &conn,
+        semester_year_id,
+        subject_id,
+        section_id,
+        name,
+        max_score,
+        date,
+    )
 }
 
 fn create_quiz_bulk_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     max_score: f64,
     date: String,
 ) -> Result<(), String> {
-    // Get all enrollment IDs for this subject+semester
+    // Get all enrollment IDs for this subject+semester+section
     let mut stmt = conn
-        .prepare("SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2")
+        .prepare("SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2 AND section_id = ?3")
         .map_err(|e| format!("Query failed: {e}"))?;
 
     let ids: Vec<String> = stmt
-        .query_map(rusqlite::params![semester_year_id, subject_id], |row| {
-            row.get(0)
-        })
+        .query_map(
+            rusqlite::params![semester_year_id, subject_id, section_id],
+            |row| row.get(0),
+        )
         .map_err(|e| format!("Query failed: {e}"))?
         .filter_map(|r| r.ok())
         .collect();
@@ -286,30 +299,41 @@ pub fn create_assignment_bulk(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     max_score: f64,
     date: String,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    create_assignment_bulk_impl(&conn, semester_year_id, subject_id, name, max_score, date)
+    create_assignment_bulk_impl(
+        &conn,
+        semester_year_id,
+        subject_id,
+        section_id,
+        name,
+        max_score,
+        date,
+    )
 }
 
 fn create_assignment_bulk_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     max_score: f64,
     date: String,
 ) -> Result<(), String> {
     let mut stmt = conn
-        .prepare("SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2")
+        .prepare("SELECT id FROM enrollments WHERE semester_year_id = ?1 AND subject_id = ?2 AND section_id = ?3")
         .map_err(|e| format!("Query failed: {e}"))?;
 
     let ids: Vec<String> = stmt
-        .query_map(rusqlite::params![semester_year_id, subject_id], |row| {
-            row.get(0)
-        })
+        .query_map(
+            rusqlite::params![semester_year_id, subject_id, section_id],
+            |row| row.get(0),
+        )
         .map_err(|e| format!("Query failed: {e}"))?
         .filter_map(|r| r.ok())
         .collect();
@@ -402,17 +426,19 @@ pub fn delete_quiz_column(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     date: String,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    delete_quiz_column_impl(&conn, semester_year_id, subject_id, name, date)
+    delete_quiz_column_impl(&conn, semester_year_id, subject_id, section_id, name, date)
 }
 
 fn delete_quiz_column_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     date: String,
 ) -> Result<(), String> {
@@ -420,10 +446,10 @@ fn delete_quiz_column_impl(
         "DELETE FROM quizzes WHERE id IN (
             SELECT q.id FROM quizzes q
             JOIN enrollments e ON e.id = q.enrollment_id
-            WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
-              AND q.name = ?3 AND q.date = ?4
+            WHERE e.semester_year_id = ?1 AND e.subject_id = ?2 AND e.section_id = ?3
+              AND q.name = ?4 AND q.date = ?5
         )",
-        rusqlite::params![semester_year_id, subject_id, name, date],
+        rusqlite::params![semester_year_id, subject_id, section_id, name, date],
     )
     .map_err(|e| format!("Delete quiz column failed: {e}"))?;
     Ok(())
@@ -434,17 +460,19 @@ pub fn delete_assignment_column(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     date: String,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    delete_assignment_column_impl(&conn, semester_year_id, subject_id, name, date)
+    delete_assignment_column_impl(&conn, semester_year_id, subject_id, section_id, name, date)
 }
 
 fn delete_assignment_column_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
     name: String,
     date: String,
 ) -> Result<(), String> {
@@ -452,10 +480,10 @@ fn delete_assignment_column_impl(
         "DELETE FROM assignments WHERE id IN (
             SELECT a.id FROM assignments a
             JOIN enrollments e ON e.id = a.enrollment_id
-            WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
-              AND a.name = ?3 AND a.due_date = ?4
+            WHERE e.semester_year_id = ?1 AND e.subject_id = ?2 AND e.section_id = ?3
+              AND a.name = ?4 AND a.due_date = ?5
         )",
-        rusqlite::params![semester_year_id, subject_id, name, date],
+        rusqlite::params![semester_year_id, subject_id, section_id, name, date],
     )
     .map_err(|e| format!("Delete assignment column failed: {e}"))?;
     Ok(())
@@ -464,13 +492,14 @@ fn delete_assignment_column_impl(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::sections::{create_section_impl, get_sections_impl};
     use crate::commands::test_utils;
 
     #[test]
     fn empty_sheet_when_no_grade_data() {
         let conn = test_utils::test_conn();
         let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         // enrolled students are listed, but no grade columns exist
         assert_eq!(sheet.students.len(), 2);
         assert!(sheet.quizzes.is_empty());
@@ -485,13 +514,14 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz 1".into(),
             10.0,
             "2026-01-01".into(),
         )
         .unwrap();
 
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(sheet.students.len(), 2);
         assert_eq!(sheet.quizzes.len(), 1);
         assert_eq!(sheet.quizzes[0].name, "Quiz 1");
@@ -512,6 +542,7 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz 1".into(),
             10.0,
             "2026-01-01".into(),
@@ -519,7 +550,7 @@ mod tests {
         .unwrap();
 
         // grade only Alice's quiz
-        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         let alice = sheet
             .students
             .iter()
@@ -528,7 +559,7 @@ mod tests {
         let qid = alice.quiz_ids[0].clone().unwrap();
         update_quiz_score_impl(&conn, qid, Some(8.5)).unwrap();
 
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         let alice = sheet
             .students
             .iter()
@@ -552,6 +583,7 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz".into(),
             10.0,
             "2026-01-01".into(),
@@ -561,13 +593,14 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz".into(),
             20.0,
             "2026-02-01".into(),
         )
         .unwrap();
 
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(sheet.quizzes.len(), 2);
         assert_eq!(sheet.quizzes[0].max_score, 10.0);
         assert_eq!(sheet.quizzes[1].max_score, 20.0);
@@ -584,16 +617,17 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz 1".into(),
             10.0,
             "2026-01-01".into(),
         )
         .unwrap();
-        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         let qid = sheet.students[0].quiz_ids[0].clone().unwrap();
         update_quiz_score_impl(&conn, qid.clone(), Some(3.0)).unwrap();
         update_quiz_score_impl(&conn, qid, None).unwrap();
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(sheet.students[0].quiz_scores[0], None);
     }
 
@@ -605,15 +639,16 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz 1".into(),
             10.0,
             "2026-01-01".into(),
         )
         .unwrap();
-        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         let qid = sheet.students[0].quiz_ids[0].clone().unwrap();
         delete_quiz_impl(&conn, qid).unwrap();
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(sheet.students[0].quiz_ids[0], None); // still 1 column but Alice has no row
         assert!(sheet.students[1].quiz_ids[0].is_some());
     }
@@ -625,10 +660,13 @@ mod tests {
         // second subject with same quiz name+date
         test_utils::seed_subject(&conn, "sub-2", "Networks");
         test_utils::seed_enrollment(&conn, "enr-a2", "stu-a", &sy, "sub-2");
+        // assign the second subject's enrollment to the default section too
+        test_utils::seed_section(&conn, "sec-1", &sy, "sub-2");
         create_quiz_bulk_impl(
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz 1".into(),
             10.0,
             "2026-01-01".into(),
@@ -638,6 +676,7 @@ mod tests {
             &conn,
             sy.clone(),
             "sub-2".into(),
+            "sec-1".into(),
             "Quiz 1".into(),
             10.0,
             "2026-01-01".into(),
@@ -648,17 +687,20 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "Quiz 1".into(),
             "2026-01-01".into(),
         )
         .unwrap();
 
-        assert!(get_grades_impl(&conn, sy.clone(), sub.clone())
-            .unwrap()
-            .quizzes
-            .is_empty());
+        assert!(
+            get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into())
+                .unwrap()
+                .quizzes
+                .is_empty()
+        );
         assert_eq!(
-            get_grades_impl(&conn, sy, "sub-2".into())
+            get_grades_impl(&conn, sy, "sub-2".into(), "sec-1".into())
                 .unwrap()
                 .quizzes
                 .len(),
@@ -674,25 +716,26 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "HW 1".into(),
             5.0,
             "2026-01-05".into(),
         )
         .unwrap();
 
-        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         assert_eq!(sheet.assignments.len(), 1);
         assert_eq!(sheet.assignments[0].name, "HW 1");
         assert_eq!(sheet.assignments[0].date, "2026-01-05");
 
         let aid = sheet.students[0].assignment_ids[0].clone().unwrap();
         update_assignment_score_impl(&conn, aid, Some(4.0)).unwrap();
-        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let sheet = get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         assert_eq!(sheet.students[0].assignment_scores[0], Some(4.0));
 
         delete_assignment_impl(&conn, sheet.students[1].assignment_ids[0].clone().unwrap())
             .unwrap();
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(sheet.students[1].assignment_ids[0], None);
     }
 
@@ -704,6 +747,7 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "HW".into(),
             5.0,
             "2026-01-05".into(),
@@ -713,6 +757,7 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "HW".into(),
             5.0,
             "2026-01-05".into(),
@@ -723,14 +768,113 @@ mod tests {
             &conn,
             sy.clone(),
             sub.clone(),
+            "sec-1".into(),
             "HW".into(),
             "2026-01-05".into(),
         )
         .unwrap();
-        let sheet = get_grades_impl(&conn, sy, sub).unwrap();
+        let sheet = get_grades_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert!(sheet.assignments.is_empty());
         for s in &sheet.students {
             assert!(s.assignment_ids.iter().all(|i| i.is_none()));
         }
+    }
+
+    #[test]
+    fn bulk_create_only_hits_its_own_section() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        // second section with its own student
+        create_section_impl(&conn, &sy, &sub, "Group B", None).unwrap();
+        let sec_b = get_sections_impl(&conn, &sy, &sub).unwrap()[1].id.clone();
+        test_utils::seed_student(&conn, "stu-c", "Charlie");
+        test_utils::seed_enrollment(&conn, "enr-c", "stu-c", &sy, &sub);
+        conn.execute(
+            "UPDATE enrollments SET section_id = ?1 WHERE id = 'enr-c'",
+            rusqlite::params![sec_b],
+        )
+        .unwrap();
+
+        create_quiz_bulk_impl(
+            &conn,
+            sy.clone(),
+            sub.clone(),
+            "sec-1".into(),
+            "Quiz 1".into(),
+            10.0,
+            "2026-01-01".into(),
+        )
+        .unwrap();
+
+        // Group A sheet: 2 students, 1 quiz column
+        let sheet_a = get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
+        assert_eq!(sheet_a.students.len(), 2);
+        assert_eq!(sheet_a.quizzes.len(), 1);
+        // Group B sheet: Charlie enrolled but no quiz column
+        let sheet_b = get_grades_impl(&conn, sy, sub, sec_b).unwrap();
+        assert_eq!(sheet_b.students.len(), 1);
+        assert_eq!(sheet_b.students[0].student_name, "Charlie");
+        assert!(sheet_b.quizzes.is_empty());
+        assert!(sheet_b.students[0].quiz_ids.is_empty());
+    }
+
+    #[test]
+    fn delete_quiz_column_scoped_to_section() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        // second section shares the same quiz name+date
+        create_section_impl(&conn, &sy, &sub, "Group B", None).unwrap();
+        let sec_b = get_sections_impl(&conn, &sy, &sub).unwrap()[1].id.clone();
+        test_utils::seed_student(&conn, "stu-c", "Charlie");
+        test_utils::seed_enrollment(&conn, "enr-c", "stu-c", &sy, &sub);
+        conn.execute(
+            "UPDATE enrollments SET section_id = ?1 WHERE id = 'enr-c'",
+            rusqlite::params![sec_b],
+        )
+        .unwrap();
+        create_quiz_bulk_impl(
+            &conn,
+            sy.clone(),
+            sub.clone(),
+            "sec-1".into(),
+            "Quiz 1".into(),
+            10.0,
+            "2026-01-01".into(),
+        )
+        .unwrap();
+        create_quiz_bulk_impl(
+            &conn,
+            sy.clone(),
+            sub.clone(),
+            sec_b.clone(),
+            "Quiz 1".into(),
+            10.0,
+            "2026-01-01".into(),
+        )
+        .unwrap();
+
+        delete_quiz_column_impl(
+            &conn,
+            sy.clone(),
+            sub.clone(),
+            "sec-1".into(),
+            "Quiz 1".into(),
+            "2026-01-01".into(),
+        )
+        .unwrap();
+
+        assert!(
+            get_grades_impl(&conn, sy.clone(), sub.clone(), "sec-1".into())
+                .unwrap()
+                .quizzes
+                .is_empty()
+        );
+        assert_eq!(
+            get_grades_impl(&conn, sy, sub, sec_b)
+                .unwrap()
+                .quizzes
+                .len(),
+            1
+        );
     }
 }

@@ -25,35 +25,41 @@ pub fn get_lectures(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<Vec<LectureWithAttendance>, String> {
     let conn = crate::db::open_db(&app)?;
-    get_lectures_impl(&conn, semester_year_id, subject_id)
+    get_lectures_impl(&conn, semester_year_id, subject_id, section_id)
 }
 
 fn get_lectures_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
+    section_id: String,
 ) -> Result<Vec<LectureWithAttendance>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, subject_id, semester_year_id, date, title
              FROM lectures
              WHERE subject_id = ?1 AND (semester_year_id IS NULL OR semester_year_id = ?2)
+               AND section_id = ?3
              ORDER BY date DESC",
         )
         .map_err(|e| format!("Query prepare failed: {e}"))?;
 
     let rows = stmt
-        .query_map(rusqlite::params![subject_id, semester_year_id], |row| {
-            Ok(LectureWithAttendance {
-                id: row.get(0)?,
-                subject_id: row.get(1)?,
-                semester_year_id: row.get(2)?,
-                date: row.get(3)?,
-                title: row.get(4)?,
-            })
-        })
+        .query_map(
+            rusqlite::params![subject_id, semester_year_id, section_id],
+            |row| {
+                Ok(LectureWithAttendance {
+                    id: row.get(0)?,
+                    subject_id: row.get(1)?,
+                    semester_year_id: row.get(2)?,
+                    date: row.get(3)?,
+                    title: row.get(4)?,
+                })
+            },
+        )
         .map_err(|e| format!("Query failed: {e}"))?;
 
     let mut result = Vec::new();
@@ -68,27 +74,30 @@ pub fn create_lecture(
     app: AppHandle,
     subject_id: String,
     semester_year_id: String,
+    section_id: String,
     date: String,
     title: Option<String>,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    create_lecture_impl(&conn, subject_id, semester_year_id, date, title)
+    create_lecture_impl(&conn, subject_id, semester_year_id, section_id, date, title)
 }
 
 fn create_lecture_impl(
     conn: &Connection,
     subject_id: String,
     semester_year_id: String,
+    section_id: String,
     date: String,
     title: Option<String>,
 ) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO lectures (id, subject_id, semester_year_id, date, title)
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, date, title)
+         VALUES (?, ?, ?, ?, ?, ?)",
         rusqlite::params![
             uuid::Uuid::new_v4().to_string(),
             subject_id,
             semester_year_id,
+            section_id,
             date,
             title,
         ],
@@ -199,14 +208,16 @@ fn seed_attendance_impl(
     semester_year_id: String,
     subject_id: String,
 ) -> Result<(), String> {
-    // Insert absent records for all enrolled students who don't have one
+    // Insert absent records for all students enrolled in the lecture's own
+    // section who don't have a record yet.
     let mut stmt = conn
         .prepare(
             "SELECT e.id FROM enrollments e
              WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
-             AND e.id NOT IN (
-                 SELECT enrollment_id FROM attendance WHERE lecture_id = ?3
-             )",
+               AND e.section_id = (SELECT section_id FROM lectures WHERE id = ?3)
+               AND e.id NOT IN (
+                   SELECT enrollment_id FROM attendance WHERE lecture_id = ?3
+               )",
         )
         .map_err(|e| format!("Query failed: {e}"))?;
 
@@ -234,20 +245,31 @@ fn seed_attendance_impl(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::sections::{create_section_impl, get_sections_impl};
     use crate::commands::test_utils;
 
     fn seeded_conn() -> (Connection, String, String) {
         let conn = test_utils::test_conn();
         let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        test_utils::seed_section(&conn, "sec-1", &sy, &sub);
         create_lecture_impl(
             &conn,
             sub.clone(),
             sy.clone(),
+            "sec-1".into(),
             "2026-02-01".into(),
             Some("Intro".into()),
         )
         .unwrap();
-        create_lecture_impl(&conn, sub.clone(), sy.clone(), "2026-02-08".into(), None).unwrap();
+        create_lecture_impl(
+            &conn,
+            sub.clone(),
+            sy.clone(),
+            "sec-1".into(),
+            "2026-02-08".into(),
+            None,
+        )
+        .unwrap();
         (conn, sy, sub)
     }
 
@@ -256,9 +278,17 @@ mod tests {
         let (conn, sy, sub) = seeded_conn();
         // lecture for another subject must not appear
         test_utils::seed_subject(&conn, "sub-2", "Networks");
-        create_lecture_impl(&conn, "sub-2".into(), sy.clone(), "2026-02-15".into(), None).unwrap();
+        create_lecture_impl(
+            &conn,
+            "sub-2".into(),
+            sy.clone(),
+            "sec-1".into(),
+            "2026-02-15".into(),
+            None,
+        )
+        .unwrap();
 
-        let lectures = get_lectures_impl(&conn, sy, sub).unwrap();
+        let lectures = get_lectures_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(lectures.len(), 2);
         assert_eq!(lectures[0].date, "2026-02-08");
         assert_eq!(lectures[1].date, "2026-02-01");
@@ -268,25 +298,31 @@ mod tests {
     #[test]
     fn create_lecture_rejects_duplicate_date() {
         let (conn, sy, sub) = seeded_conn();
-        let err = create_lecture_impl(&conn, sub, sy, "2026-02-01".into(), None).unwrap_err();
+        let err = create_lecture_impl(&conn, sub, sy, "sec-1".into(), "2026-02-01".into(), None)
+            .unwrap_err();
         assert!(err.contains("Create lecture failed"), "{err}");
     }
 
     #[test]
     fn delete_lecture_removes_and_cascades_attendance() {
         let (conn, sy, sub) = seeded_conn();
-        let lectures = get_lectures_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let lectures = get_lectures_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         let lid = lectures[0].id.clone();
         seed_attendance_impl(&conn, lid.clone(), sy.clone(), sub.clone()).unwrap();
         assert_eq!(get_attendance_impl(&conn, lid.clone()).unwrap().len(), 2);
         delete_lecture_impl(&conn, lid).unwrap();
-        assert_eq!(get_lectures_impl(&conn, sy, sub).unwrap().len(), 1);
+        assert_eq!(
+            get_lectures_impl(&conn, sy, sub, "sec-1".into())
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
     fn seed_attendance_fills_absent_and_is_idempotent() {
         let (conn, sy, sub) = seeded_conn();
-        let lectures = get_lectures_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let lectures = get_lectures_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         let lid = lectures[0].id.clone();
 
         seed_attendance_impl(&conn, lid.clone(), sy.clone(), sub.clone()).unwrap();
@@ -300,7 +336,7 @@ mod tests {
     #[test]
     fn seed_attendance_does_not_overwrite_existing() {
         let (conn, sy, sub) = seeded_conn();
-        let lectures = get_lectures_impl(&conn, sy.clone(), sub.clone()).unwrap();
+        let lectures = get_lectures_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
         let lid = lectures[0].id.clone();
         mark_attendance_impl(&conn, lid.clone(), "enr-a".into(), "present".into()).unwrap();
 
@@ -316,7 +352,7 @@ mod tests {
     #[test]
     fn mark_attendance_upserts() {
         let (conn, sy, sub) = seeded_conn();
-        let lectures = get_lectures_impl(&conn, sy, sub).unwrap();
+        let lectures = get_lectures_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         let lid = lectures[0].id.clone();
 
         mark_attendance_impl(&conn, lid.clone(), "enr-a".into(), "present".into()).unwrap();
@@ -331,12 +367,59 @@ mod tests {
     #[test]
     fn get_attendance_orders_by_student_name() {
         let (conn, sy, sub) = seeded_conn();
-        let lectures = get_lectures_impl(&conn, sy, sub).unwrap();
+        let lectures = get_lectures_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         let lid = lectures[0].id.clone();
         mark_attendance_impl(&conn, lid.clone(), "enr-b".into(), "present".into()).unwrap();
         mark_attendance_impl(&conn, lid, "enr-a".into(), "present".into()).unwrap();
         let recs = get_attendance_impl(&conn, lectures[0].id.clone()).unwrap();
         assert_eq!(recs[0].student_name, "Alice");
         assert_eq!(recs[1].student_name, "Bob");
+    }
+
+    #[test]
+    fn seed_attendance_only_fills_lecture_section_roster() {
+        let (conn, sy, sub) = seeded_conn();
+        // Group B with its own student + lecture on the same date as Group A's
+        // second lecture (allowed by the per-section UNIQUE from migration 015)
+        create_section_impl(&conn, &sy, &sub, "Group B", None).unwrap();
+        let sec_b = get_sections_impl(&conn, &sy, &sub).unwrap()[1].id.clone();
+        test_utils::seed_student(&conn, "stu-c", "Charlie");
+        test_utils::seed_enrollment(&conn, "enr-c", "stu-c", &sy, &sub);
+        conn.execute(
+            "UPDATE enrollments SET section_id = ?1 WHERE id = 'enr-c'",
+            rusqlite::params![sec_b],
+        )
+        .unwrap();
+        create_lecture_impl(
+            &conn,
+            sub.clone(),
+            sy.clone(),
+            sec_b.clone(),
+            "2026-02-08".into(),
+            None,
+        )
+        .unwrap();
+
+        // seed the Group B lecture: only Charlie gets a record, not Group A
+        let lec_b = get_lectures_impl(&conn, sy.clone(), sub.clone(), sec_b.clone())
+            .unwrap()
+            .into_iter()
+            .find(|l| l.date == "2026-02-08")
+            .unwrap();
+        seed_attendance_impl(&conn, lec_b.id.clone(), sy.clone(), sub.clone()).unwrap();
+        let recs = get_attendance_impl(&conn, lec_b.id).unwrap();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].student_name, "Charlie");
+
+        // Group A's same-date lecture still only has its own two students
+        let lec_a = get_lectures_impl(&conn, sy.clone(), sub.clone(), "sec-1".into())
+            .unwrap()
+            .into_iter()
+            .find(|l| l.date == "2026-02-08")
+            .unwrap();
+        seed_attendance_impl(&conn, lec_a.id.clone(), sy.clone(), sub.clone()).unwrap();
+        let recs = get_attendance_impl(&conn, lec_a.id).unwrap();
+        assert_eq!(recs.len(), 2);
+        assert!(recs.iter().all(|r| r.student_name != "Charlie"));
     }
 }

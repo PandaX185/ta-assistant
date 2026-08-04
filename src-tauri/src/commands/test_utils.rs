@@ -56,6 +56,29 @@ pub fn seed_enrollment(
     .expect("seed enrollment");
 }
 
+/// Seeds the default section used by [`seed_basic_scenario`] and assigns any
+/// NULL-section enrollments to it. Returns the section id. Idempotent — safe
+/// to call repeatedly (e.g. after seeding extra enrollments).
+pub fn seed_section(
+    conn: &Connection,
+    id: &str,
+    semester_year_id: &str,
+    subject_id: &str,
+) -> String {
+    conn.execute(
+        "INSERT OR IGNORE INTO sections (id, subject_id, semester_year_id, name, color)
+         VALUES (?1, ?2, ?3, 'Group A', NULL)",
+        rusqlite::params![id, subject_id, semester_year_id],
+    )
+    .expect("seed section");
+    conn.execute(
+        "UPDATE enrollments SET section_id = ?1 WHERE section_id IS NULL",
+        rusqlite::params![id],
+    )
+    .expect("assign section");
+    id.to_string()
+}
+
 /// Standard fixture: one semester (Fall 2026), one subject, two students enrolled.
 /// Returns the four IDs in order: (semester_year_id, subject_id, student_a, student_b).
 pub fn seed_basic_scenario(conn: &Connection) -> (String, String, String, String) {
@@ -69,6 +92,7 @@ pub fn seed_basic_scenario(conn: &Connection) -> (String, String, String, String
     seed_student(conn, b, "Bob");
     seed_enrollment(conn, "enr-a", a, sy, sub);
     seed_enrollment(conn, "enr-b", b, sy, sub);
+    seed_section(conn, "sec-1", sy, sub);
     (
         sy.to_string(),
         sub.to_string(),

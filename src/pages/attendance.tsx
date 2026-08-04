@@ -34,8 +34,13 @@ interface AttendanceRecord {
 
 export default function Attendance() {
   const { t } = useTranslation();
-  const { selectedSemesterYearId, selectedSubjectId, subjects } =
-    useFilterStore();
+  const {
+    selectedSemesterYearId,
+    selectedSubjectId,
+    selectedSectionId,
+    sections,
+    subjects,
+  } = useFilterStore();
 
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null);
@@ -50,7 +55,7 @@ export default function Attendance() {
   const [createDesc, setCreateDesc] = useState("");
 
   const loadLectures = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId) {
+    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
       setLectures([]);
       return;
     }
@@ -58,12 +63,13 @@ export default function Attendance() {
       const data = await invoke<Lecture[]>("get_lectures", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
       });
       setLectures(data);
     } catch (e) {
       console.error(e);
     }
-  }, [selectedSemesterYearId, selectedSubjectId]);
+  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
 
   const loadAttendance = useCallback(
     async (lectureId: string) => {
@@ -93,11 +99,13 @@ export default function Attendance() {
   }, [selectedLecture, loadAttendance]);
 
   const handleCreate = async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId || !createDate) return;
+    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId || !createDate)
+      return;
     try {
       await invoke("create_lecture", {
         subjectId: selectedSubjectId,
         semesterYearId: selectedSemesterYearId,
+        sectionId: selectedSectionId,
         date: createDate,
         title: createDesc || null,
       });
@@ -156,7 +164,8 @@ export default function Attendance() {
       attendance.length === 0 &&
       !loading &&
       selectedSemesterYearId &&
-      selectedSubjectId
+      selectedSubjectId &&
+      selectedSectionId
     ) {
       const seedAndReload = async () => {
         try {
@@ -164,6 +173,7 @@ export default function Attendance() {
             lectureId: selectedLecture.id,
             semesterYearId: selectedSemesterYearId,
             subjectId: selectedSubjectId,
+            sectionId: selectedSectionId,
           });
           loadAttendance(selectedLecture.id);
         } catch (e) {
@@ -172,11 +182,20 @@ export default function Attendance() {
       };
       seedAndReload();
     }
-  }, [selectedLecture, attendance, loading, selectedSemesterYearId, selectedSubjectId, loadAttendance]);
+  }, [
+    selectedLecture,
+    attendance,
+    loading,
+    selectedSemesterYearId,
+    selectedSubjectId,
+    selectedSectionId,
+    loadAttendance,
+  ]);
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
+  const selectedSection = sections.find((s) => s.id === selectedSectionId);
 
-  if (!selectedSemesterYearId || !selectedSubjectId) {
+  if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">{t("attendance.title")}</h1>
@@ -192,6 +211,7 @@ export default function Attendance() {
           <h1 className="text-2xl font-bold">{t("attendance.title")}</h1>
           <p className="text-sm text-muted-foreground">
             {selectedSubject?.name}
+            {selectedSection && ` · ${selectedSection.name}`}
           </p>
         </div>
 
