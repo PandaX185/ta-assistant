@@ -5,24 +5,34 @@ use tauri::Emitter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:ta-assistant.db", db::migrations::get_migrations())
-                .build(),
-        )
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = app.emit("toggle-search", ());
-                    }
-                })
-                .build(),
-        )
+    let builder = tauri::Builder::default().plugin(
+        tauri_plugin_sql::Builder::default()
+            .add_migrations("sqlite:ta-assistant.db", db::migrations::get_migrations())
+            .build(),
+    );
+
+    // Desktop-only: the global-shortcut plugin (global-hotkey) has no
+    // Android/iOS support. Registered under #[cfg(desktop)] so mobile builds
+    // compile without it; the frontend toggle-search listener is a harmless
+    // no-op on mobile.
+    #[cfg(desktop)]
+    let builder = builder.plugin(
+        tauri_plugin_global_shortcut::Builder::new()
+            .with_handler(|app, _shortcut, event| {
+                if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                    let _ = app.emit("toggle-search", ());
+                }
+            })
+            .build(),
+    );
+
+    builder
         .setup(|app| {
-            use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            app.global_shortcut().register("Ctrl+Shift+P")?;
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                app.global_shortcut().register("Ctrl+Shift+P")?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
