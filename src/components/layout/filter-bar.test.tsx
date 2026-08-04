@@ -6,9 +6,18 @@ import { useFilterStore } from "@/stores/filter-store";
 import FilterBar from "./filter-bar";
 
 const semesterYears = [{ id: "2", year: 2026, semester: "Fall" }];
-const subjects = [{ id: "3", name: "Databases", code: "DB", color: null }];
+const subjects = [
+  { id: "3", name: "Databases", code: "DB", color: null },
+  { id: "4", name: "Networks", code: "NW", color: null },
+];
 const sections = [
-  { id: "sec-1", subject_id: "3", semester_year_id: "2", name: "Group A", color: null },
+  {
+    id: "sec-1",
+    subject_id: "3",
+    semester_year_id: "2",
+    name: "Group A",
+    color: null,
+  },
 ];
 
 beforeEach(() => {
@@ -29,8 +38,11 @@ function mockDefaults(overrides?: {
   semesterYears?: typeof semesterYears;
   subjects?: typeof subjects;
 }) {
-  const { sections: secs = [], semesterYears: sys = semesterYears, subjects: subs = subjects } =
-    overrides ?? {};
+  const {
+    sections: secs = [],
+    semesterYears: sys = semesterYears,
+    subjects: subs = subjects,
+  } = overrides ?? {};
   vi.mocked(invoke).mockImplementation((cmd: string) => {
     if (cmd === "get_semester_years") return Promise.resolve(sys);
     if (cmd === "get_subjects") return Promise.resolve(subs);
@@ -40,24 +52,24 @@ function mockDefaults(overrides?: {
 }
 
 describe("FilterBar", () => {
-  it("loads filter data on mount when not loaded yet", async () => {
+  it("loads semester years on mount; subjects are semester-scoped", async () => {
     mockDefaults();
-
     render(<FilterBar />);
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("get_semester_years"),
     );
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("get_subjects"));
-
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
     expect(useFilterStore.getState().semesterYears).toEqual(semesterYears);
-    expect(useFilterStore.getState().subjects).toEqual(subjects);
+    // No semester selected yet → subjects must NOT be fetched globally.
+    expect(invoke).not.toHaveBeenCalledWith(
+      "get_subjects",
+      expect.anything(),
+    );
   });
 
   it("renders semester and subject selects with their values", async () => {
     mockDefaults();
-
     render(<FilterBar />);
 
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
@@ -73,15 +85,26 @@ describe("FilterBar", () => {
     expect(useFilterStore.getState().selectedSemesterYearId).toBe("2");
     expect(useFilterStore.getState().selectedSubjectId).toBeNull();
 
+    // Subjects now load for the chosen semester only
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_subjects", {
+        semesterYearId: "2",
+      }),
+    );
+    await waitFor(() =>
+      expect(useFilterStore.getState().subjects).toEqual(subjects),
+    );
+
     // Select a subject
     await user.click(screen.getAllByRole("combobox")[1]);
-    await user.click(await screen.findByRole("option", { name: "[DB] Databases" }));
+    await user.click(
+      await screen.findByRole("option", { name: "[DB] Databases" }),
+    );
     expect(useFilterStore.getState().selectedSubjectId).toBe("3");
   });
 
-  it("loads and auto-selects the section when only one exists", async () => {
-    mockDefaults({ sections });
-
+  it("auto-selects a single subject and then its single section", async () => {
+    mockDefaults({ subjects: [subjects[0]], sections });
     render(<FilterBar />);
 
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
@@ -89,25 +112,21 @@ describe("FilterBar", () => {
     const user = userEvent.setup();
     await user.click(screen.getAllByRole("combobox")[0]);
     await user.click(await screen.findByRole("option", { name: "2026 Fall" }));
-    await user.click(screen.getAllByRole("combobox")[1]);
-    await user.click(await screen.findByRole("option", { name: "[DB] Databases" }));
 
-    // Section dropdown appears once semester + subject are set, and the
-    // single section is auto-selected
+    // Exactly one subject → auto-selected, which cascades into sections.
     await waitFor(() => {
-      expect(useFilterStore.getState().sections).toEqual(sections);
+      expect(useFilterStore.getState().selectedSubjectId).toBe("3");
       expect(useFilterStore.getState().selectedSectionId).toBe("sec-1");
     });
-    expect(screen.getByText("Group A")).toBeInTheDocument();
     expect(invoke).toHaveBeenCalledWith("get_sections", {
       semesterYearId: "2",
       subjectId: "3",
     });
+    expect(screen.getByText("Group A")).toBeInTheDocument();
   });
 
   it("shows section placeholder when semester+subject have no sections", async () => {
     mockDefaults({ sections: [] });
-
     render(<FilterBar />);
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
 
@@ -115,7 +134,9 @@ describe("FilterBar", () => {
     await user.click(screen.getAllByRole("combobox")[0]);
     await user.click(await screen.findByRole("option", { name: "2026 Fall" }));
     await user.click(screen.getAllByRole("combobox")[1]);
-    await user.click(await screen.findByRole("option", { name: "[DB] Databases" }));
+    await user.click(
+      await screen.findByRole("option", { name: "[DB] Databases" }),
+    );
 
     await user.click(screen.getAllByRole("combobox")[2]);
     expect(await screen.findByText("No sections yet")).toBeInTheDocument();
@@ -123,7 +144,6 @@ describe("FilterBar", () => {
 
   it("shows placeholder items when there is no data", async () => {
     mockDefaults({ semesterYears: [], subjects: [] });
-
     render(<FilterBar />);
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
 
@@ -150,7 +170,9 @@ describe("FilterBar", () => {
     vi.mocked(invoke).mockRejectedValue(new Error("db unavailable"));
     render(<FilterBar />);
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("get_semester_years"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_semester_years"),
+    );
     await new Promise((r) => setTimeout(r, 50));
 
     expect(useFilterStore.getState().loaded).toBe(false);

@@ -93,6 +93,12 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/015_rebuild_lectures_enrollments_uniques.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 16,
+            description: "semester-scope subjects with backfill",
+            sql: include_str!("../../migrations/016_subjects_semester_scoped.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

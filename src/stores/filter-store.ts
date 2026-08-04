@@ -31,6 +31,7 @@ export interface FilterState {
   selectedSectionId: string | null;
   loaded: boolean;
   loadData: () => Promise<void>;
+  loadSubjects: () => Promise<void>;
   loadSections: () => Promise<void>;
   setSelectedSemesterYearId: (id: string | null) => void;
   setSelectedSubjectId: (id: string | null) => void;
@@ -50,17 +51,49 @@ export const useFilterStore = create<FilterState>((set) => ({
 
   loadData: async () => {
     try {
-      const [years, subs] = await Promise.all([
-        invoke<SemesterYear[]>("get_semester_years"),
-        invoke<Subject[]>("get_subjects"),
-      ]);
+      const years = await invoke<SemesterYear[]>("get_semester_years");
       set({
         semesterYears: years,
-        subjects: subs,
         loaded: true,
       });
     } catch (e) {
       console.error("Failed to load filter data:", e);
+    }
+  },
+
+  // Subjects are semester-scoped: reload whenever the semester changes.
+  // Auto-selects when only one subject exists, keeps a still-valid selection,
+  // and clears subject + section otherwise.
+  loadSubjects: async () => {
+    const { selectedSemesterYearId } = useFilterStore.getState();
+    if (!selectedSemesterYearId) {
+      set({
+        subjects: [],
+        selectedSubjectId: null,
+        sections: [],
+        selectedSectionId: null,
+      });
+      return;
+    }
+    try {
+      const subs = await invoke<Subject[]>("get_subjects", {
+        semesterYearId: selectedSemesterYearId,
+      });
+      set((state) => ({
+        subjects: subs,
+        selectedSubjectId:
+          subs.length === 1
+            ? subs[0].id
+            : state.selectedSubjectId &&
+                subs.some((s) => s.id === state.selectedSubjectId)
+              ? state.selectedSubjectId
+              : null,
+        sections: [],
+        selectedSectionId: null,
+      }));
+    } catch (e) {
+      console.error("Failed to load subjects:", e);
+      set({ subjects: [], selectedSubjectId: null });
     }
   },
 

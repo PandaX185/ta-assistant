@@ -46,18 +46,21 @@ fn get_semester_years_impl(conn: &Connection) -> Result<Vec<SemesterYear>, Strin
 }
 
 #[tauri::command]
-pub fn get_subjects(app: AppHandle) -> Result<Vec<Subject>, String> {
+pub fn get_subjects(app: AppHandle, semester_year_id: String) -> Result<Vec<Subject>, String> {
     let conn = crate::db::open_db(&app)?;
-    get_subjects_impl(&conn)
+    get_subjects_impl(&conn, &semester_year_id)
 }
 
-fn get_subjects_impl(conn: &Connection) -> Result<Vec<Subject>, String> {
+fn get_subjects_impl(conn: &Connection, semester_year_id: &str) -> Result<Vec<Subject>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, name, code, color FROM subjects ORDER BY name")
+        .prepare(
+            "SELECT id, name, code, color FROM subjects
+             WHERE semester_year_id = ?1 ORDER BY name",
+        )
         .map_err(|e| format!("Query prepare failed: {e}"))?;
 
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params![semester_year_id], |row| {
             Ok(Subject {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -108,23 +111,31 @@ fn delete_semester_year_impl(conn: &Connection, id: String) -> Result<(), String
 #[tauri::command]
 pub fn create_subject(
     app: AppHandle,
+    semester_year_id: String,
     name: String,
     code: Option<String>,
     color: Option<String>,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    create_subject_impl(&conn, name, code, color)
+    create_subject_impl(&conn, &semester_year_id, name, code, color)
 }
 
 fn create_subject_impl(
     conn: &Connection,
+    semester_year_id: &str,
     name: String,
     code: Option<String>,
     color: Option<String>,
 ) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO subjects (id, name, code, color) VALUES (?, ?, ?, ?)",
-        rusqlite::params![uuid::Uuid::new_v4().to_string(), name, code, color],
+        "INSERT INTO subjects (id, semester_year_id, name, code, color) VALUES (?, ?, ?, ?, ?)",
+        rusqlite::params![
+            uuid::Uuid::new_v4().to_string(),
+            semester_year_id,
+            name,
+            code,
+            color
+        ],
     )
     .map_err(|e| format!("Create subject failed: {e}"))?;
     Ok(())
@@ -179,15 +190,40 @@ mod tests {
         create_semester_year_impl(&conn, 2025, "Spring".into()).unwrap();
         create_semester_year_impl(&conn, 2026, "Fall".into()).unwrap();
         create_semester_year_impl(&conn, 2026, "Summer".into()).unwrap();
+        let years = get_semester_years_impl(&conn).unwrap();
+        let fall = years
+            .iter()
+            .find(|y| y.year == 2026 && y.semester == "Fall")
+            .unwrap()
+            .id
+            .clone();
+        let summer = years
+            .iter()
+            .find(|y| y.year == 2026 && y.semester == "Summer")
+            .unwrap()
+            .id
+            .clone();
         create_subject_impl(
             &conn,
+            &fall,
             "Zebra".into(),
             Some("ZEB".into()),
             Some("#fff".into()),
         )
         .unwrap();
-        create_subject_impl(&conn, "Alpha".into(), None, None).unwrap();
+        create_subject_impl(&conn, &fall, "Alpha".into(), None, None).unwrap();
+        // Same name in a different semester is a different offering.
+        create_subject_impl(&conn, &summer, "Zebra".into(), None, None).unwrap();
         conn
+    }
+
+    fn semester_id(conn: &Connection, year: i64, semester: &str) -> String {
+        get_semester_years_impl(conn)
+            .unwrap()
+            .into_iter()
+            .find(|y| y.year == year && y.semester == semester)
+            .unwrap()
+            .id
     }
 
     #[test]
@@ -235,27 +271,52 @@ mod tests {
     #[test]
     fn subjects_empty_by_default() {
         let conn = test_utils::test_conn();
-        assert!(get_subjects_impl(&conn).unwrap().is_empty());
+        assert!(get_subjects_impl(&conn, "any").unwrap().is_empty());
     }
 
     #[test]
-    fn subjects_ordered_by_name_with_optional_fields() {
+    fn subjects_scoped_to_semester_ordered_by_name() {
         let conn = seeded_conn();
-        let subs = get_subjects_impl(&conn).unwrap();
+        let fall = semester_id(&conn, 2026, "Fall");
+        let subs = get_subjects_impl(&conn, &fall).unwrap();
         let names: Vec<&str> = subs.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, vec!["Alpha", "Zebra"]);
         assert_eq!(subs[1].code.as_deref(), Some("ZEB"));
         assert_eq!(subs[1].color.as_deref(), Some("#fff"));
         assert_eq!(subs[0].code, None);
+
+        // The same name in another semester is its own offering and does not
+        // leak into this semester's list.
+        let summer = semester_id(&conn, 2026, "Summer");
+        let summer_subs = get_subjects_impl(&conn, &summer).unwrap();
+        assert_eq!(summer_subs.len(), 1);
+        assert_eq!(summer_subs[0].name, "Zebra");
+    }
+
+    #[test]
+    fn legacy_subject_without_semester_is_invisible() {
+        // A pre-migration-016 row that escaped backfill (NULL semester) must
+        // never surface in any semester's subject list.
+        let conn = seeded_conn();
+        conn.execute(
+            "INSERT INTO subjects (id, semester_year_id, name) VALUES ('legacy-1', NULL, 'Orphan')",
+            [],
+        )
+        .unwrap();
+        let fall = semester_id(&conn, 2026, "Fall");
+        let subs = get_subjects_impl(&conn, &fall).unwrap();
+        let names: Vec<&str> = subs.iter().map(|s| s.name.as_str()).collect();
+        assert!(!names.contains(&"Orphan"));
     }
 
     #[test]
     fn update_subject_changes_fields() {
         let conn = seeded_conn();
-        let subs = get_subjects_impl(&conn).unwrap();
+        let fall = semester_id(&conn, 2026, "Fall");
+        let subs = get_subjects_impl(&conn, &fall).unwrap();
         let id = subs[0].id.clone();
         update_subject_impl(&conn, id.clone(), "Beta".into(), Some("BET".into()), None).unwrap();
-        let updated = get_subjects_impl(&conn)
+        let updated = get_subjects_impl(&conn, &fall)
             .unwrap()
             .into_iter()
             .find(|s| s.id == id)
@@ -268,8 +329,9 @@ mod tests {
     #[test]
     fn delete_subject_removes_row() {
         let conn = seeded_conn();
-        let id = get_subjects_impl(&conn).unwrap()[0].id.clone();
+        let fall = semester_id(&conn, 2026, "Fall");
+        let id = get_subjects_impl(&conn, &fall).unwrap()[0].id.clone();
         delete_subject_impl(&conn, id).unwrap();
-        assert_eq!(get_subjects_impl(&conn).unwrap().len(), 1);
+        assert_eq!(get_subjects_impl(&conn, &fall).unwrap().len(), 1);
     }
 }

@@ -35,8 +35,11 @@ test-frontend:
 	npm run test
 
 # ─── Clean ──────────────────────────────────────────────
-clean:
+clean-deps:
 	rm -rf node_modules/ dist/ src-tauri/target/
+
+clean-db:
+	rm -rf ~/.local/share/com.pandax185.ta-assistant/
 
 # ─── Rust ───────────────────────────────────────────────
 cargo-build:

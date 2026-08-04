@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,52 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useFilterStore } from "@/stores/filter-store";
+import { useFilterStore, Subject, Section } from "@/stores/filter-store";
+
+/* ───── Shared bits ───── */
+
+function SemesterPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const { semesterYears } = useFilterStore();
+  return (
+    <Select
+      value={value ?? ""}
+      onValueChange={(v) => onChange(v || null)}
+    >
+      <SelectTrigger className="w-[220px] h-9 text-sm">
+        <SelectValue placeholder="Select semester" />
+      </SelectTrigger>
+      <SelectContent>
+        {semesterYears.length === 0 && (
+          <SelectItem value="__placeholder" disabled>
+            No semesters yet — add one first
+          </SelectItem>
+        )}
+        {semesterYears.map((sy) => (
+          <SelectItem key={sy.id} value={sy.id}>
+            {sy.year} {sy.semester}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/// Defaults a local semester picker to the filter bar's selected semester,
+/// falling back to the first one. Re-runs once semesters load.
+function useDefaultSemester(semesterId: string | null, setSemesterId: (id: string) => void) {
+  const { semesterYears, selectedSemesterYearId } = useFilterStore();
+  useEffect(() => {
+    if (!semesterId && semesterYears.length > 0) {
+      setSemesterId(selectedSemesterYearId ?? semesterYears[0].id);
+    }
+  }, [semesterId, semesterYears, selectedSemesterYearId, setSemesterId]);
+}
 
 /* ───── Semester/Year Section ───── */
 
@@ -41,6 +86,12 @@ function SemesterYearSection() {
   };
 
   const handleDelete = async (id: string) => {
+    if (
+      !window.confirm(
+        "Deleting this semester removes its subjects, sections, enrollments, grades, attendance and lectures. Continue?",
+      )
+    )
+      return;
     await invoke("delete_semester_year", { id });
     loadData();
   };
@@ -132,15 +183,40 @@ function SemesterYearSection() {
   );
 }
 
-/* ───── Subject Section ───── */
+/* ───── Subject Section (semester-scoped) ───── */
 
 function SubjectSection() {
-  const { subjects, loadData } = useFilterStore();
+  const { loadSubjects } = useFilterStore();
+  const [semesterId, setSemesterId] = useState<string | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [color, setColor] = useState("");
+
+  useDefaultSemester(semesterId, setSemesterId);
+
+  const reload = async (sem: string) => {
+    const subs = await invoke<Subject[]>("get_subjects", {
+      semesterYearId: sem,
+    });
+    setSubjects(subs);
+    loadSubjects(); // keep the filter bar in sync
+    return subs;
+  };
+
+  useEffect(() => {
+    if (!semesterId) {
+      setSubjects([]);
+      setEditingId(null);
+      return;
+    }
+    reload(semesterId).catch((e) => {
+      console.error(e);
+      setSubjects([]);
+    });
+  }, [semesterId]);
 
   const resetForm = () => {
     setName("");
@@ -149,7 +225,7 @@ function SubjectSection() {
     setEditingId(null);
   };
 
-  const openEdit = (sub: { id: string; name: string; code: string | null; color: string | null }) => {
+  const openEdit = (sub: Subject) => {
     setEditingId(sub.id);
     setName(sub.name);
     setCode(sub.code ?? "");
@@ -158,7 +234,7 @@ function SubjectSection() {
   };
 
   const handleSave = async () => {
-    if (!name) return;
+    if (!name || !semesterId) return;
     if (editingId) {
       await invoke("update_subject", {
         id: editingId,
@@ -168,6 +244,7 @@ function SubjectSection() {
       });
     } else {
       await invoke("create_subject", {
+        semesterYearId: semesterId,
         name,
         code: code || null,
         color: color || null,
@@ -175,12 +252,18 @@ function SubjectSection() {
     }
     resetForm();
     setOpen(false);
-    loadData();
+    reload(semesterId);
   };
 
   const handleDelete = async (id: string) => {
+    if (
+      !window.confirm(
+        "Deleting this subject removes its sections, enrollments, grades, attendance and lectures for this semester. Continue?",
+      )
+    )
+      return;
     await invoke("delete_subject", { id });
-    loadData();
+    if (semesterId) reload(semesterId);
   };
 
   return (
@@ -238,8 +321,17 @@ function SubjectSection() {
         </Dialog>
       </div>
 
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Semester:</span>
+        <SemesterPicker value={semesterId} onChange={setSemesterId} />
+      </div>
+
       {subjects.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No subjects yet.</p>
+        <p className="text-sm text-muted-foreground">
+          {semesterId
+            ? "No subjects yet for this semester."
+            : "Select a semester to manage its subjects."}
+        </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
@@ -294,11 +386,274 @@ function SubjectSection() {
   );
 }
 
+/* ───── Sections Section ───── */
+
+function SectionsSection() {
+  const { loadSections } = useFilterStore();
+  const [semesterId, setSemesterId] = useState<string | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+
+  useDefaultSemester(semesterId, setSemesterId);
+
+  useEffect(() => {
+    if (!semesterId) {
+      setSubjects([]);
+      setSubjectId(null);
+      setSections([]);
+      return;
+    }
+    invoke<Subject[]>("get_subjects", { semesterYearId: semesterId })
+      .then(setSubjects)
+      .catch((e) => {
+        console.error(e);
+        setSubjects([]);
+      });
+  }, [semesterId]);
+
+  useEffect(() => {
+    if (!semesterId || !subjectId) {
+      setSections([]);
+      return;
+    }
+    invoke<Section[]>("get_sections", {
+      semesterYearId: semesterId,
+      subjectId,
+    })
+      .then(setSections)
+      .catch((e) => {
+        console.error(e);
+        setSections([]);
+      });
+  }, [semesterId, subjectId]);
+
+  const reloadSections = async () => {
+    if (semesterId && subjectId) {
+      const secs = await invoke<Section[]>("get_sections", {
+        semesterYearId: semesterId,
+        subjectId,
+      });
+      setSections(secs);
+    }
+    loadSections(); // keep the filter bar in sync
+  };
+
+  const handleCreate = async () => {
+    if (!name || !semesterId || !subjectId) return;
+    await invoke("create_section", {
+      semesterYearId: semesterId,
+      subjectId,
+      name,
+      color: color || null,
+    });
+    setName("");
+    setColor("");
+    setOpen(false);
+    reloadSections();
+  };
+
+  const handleRename = async () => {
+    if (!editingId || !editingName.trim()) return;
+    await invoke("rename_section", { id: editingId, name: editingName });
+    setEditingId(null);
+    setEditingName("");
+    reloadSections();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (
+      !window.confirm(
+        "Deleting this section removes its enrollments, lectures, attendance and grades. Continue?",
+      )
+    )
+      return;
+    await invoke("delete_section", { id });
+    reloadSections();
+  };
+
+  const selectedSubject = subjects.find((s) => s.id === subjectId);
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Sections</h2>
+        <Dialog
+          open={open}
+          onOpenChange={(v) => {
+            setOpen(v);
+            if (!v) {
+              setName("");
+              setColor("");
+            }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" disabled={!semesterId || !subjectId}>
+              + Add
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>New Section</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="sec-name">Name</Label>
+                <Input
+                  id="sec-name"
+                  placeholder="e.g. Group B"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sec-color">Color (optional)</Label>
+                <Input
+                  id="sec-color"
+                  type="color"
+                  value={color || "#3b82f6"}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="h-10"
+                />
+              </div>
+              <Button onClick={handleCreate} className="w-full">
+                Create
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Semester:</span>
+        <SemesterPicker value={semesterId} onChange={setSemesterId} />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Subject:</span>
+        <Select
+          value={subjectId ?? ""}
+          onValueChange={(v) => setSubjectId(v || null)}
+        >
+          <SelectTrigger className="w-[260px] h-9 text-sm">
+            <SelectValue placeholder="Select subject" />
+          </SelectTrigger>
+          <SelectContent>
+            {subjects.length === 0 && (
+              <SelectItem value="__placeholder" disabled>
+                {semesterId
+                  ? "No subjects in this semester"
+                  : "Select a semester first"}
+              </SelectItem>
+            )}
+            {subjects.map((sub) => (
+              <SelectItem key={sub.id} value={sub.id}>
+                {sub.code ? `[${sub.code}] ` : ""}
+                {sub.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {sections.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {!semesterId || !subjectId
+            ? "Select a semester and subject to see its sections."
+            : `No sections yet for ${selectedSubject?.name ?? "this subject"}.`}
+        </p>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-4 py-2 font-medium">Name</th>
+                <th className="text-right px-4 py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sections.map((sec) => (
+                <tr key={sec.id} className="border-t">
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      {sec.color && (
+                        <span
+                          className="w-3 h-3 rounded-full inline-block"
+                          style={{ backgroundColor: sec.color }}
+                        />
+                      )}
+                      {sec.name}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2 text-right space-x-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingId(sec.id);
+                        setEditingName(sec.name);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(sec.id)}
+                    >
+                      Delete
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog
+        open={editingId !== null}
+        onOpenChange={(v) => {
+          if (!v) setEditingId(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Section</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="sec-rename">Name</Label>
+              <Input
+                id="sec-rename"
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleRename} className="w-full">
+              Update
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
 /* ───── Page ───── */
 
 export default function Settings() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"semesters" | "subjects">("semesters");
+  const [tab, setTab] = useState<"semesters" | "subjects" | "sections">(
+    "semesters",
+  );
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -325,9 +680,25 @@ export default function Settings() {
         >
           Subjects
         </button>
+        <button
+          onClick={() => setTab("sections")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === "sections"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Sections
+        </button>
       </div>
 
-      {tab === "semesters" ? <SemesterYearSection /> : <SubjectSection />}
+      {tab === "semesters" ? (
+        <SemesterYearSection />
+      ) : tab === "subjects" ? (
+        <SubjectSection />
+      ) : (
+        <SectionsSection />
+      )}
     </div>
   );
 }

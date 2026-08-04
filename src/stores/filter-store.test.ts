@@ -17,23 +17,55 @@ describe("filter-store", () => {
     });
   });
 
-  it("loadData fetches years and subjects in parallel", async () => {
-    mockInvoke
-      .mockResolvedValueOnce([
-        { id: "sy-1", year: 2026, semester: "Fall" },
-      ])
-      .mockResolvedValueOnce([{ id: "sub-1", name: "Databases", code: null, color: null }]);
+  it("loadData fetches semester years only (subjects are scoped)", async () => {
+    mockInvoke.mockResolvedValueOnce([
+      { id: "sy-1", year: 2026, semester: "Fall" },
+    ]);
 
     await useFilterStore.getState().loadData();
 
     expect(mockInvoke).toHaveBeenCalledWith("get_semester_years");
-    expect(mockInvoke).toHaveBeenCalledWith("get_subjects");
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "get_subjects",
+      expect.anything(),
+    );
     const s = useFilterStore.getState();
     expect(s.loaded).toBe(true);
     expect(s.semesterYears).toHaveLength(1);
     expect(s.semesterYears[0].semester).toBe("Fall");
+    expect(s.subjects).toHaveLength(0);
+  });
+
+  it("loadSubjects fetches subjects for the selected semester", async () => {
+    useFilterStore.setState({ selectedSemesterYearId: "sy-1" });
+    mockInvoke.mockResolvedValueOnce([
+      { id: "sub-1", name: "Databases", code: null, color: null },
+    ]);
+
+    await useFilterStore.getState().loadSubjects();
+
+    expect(mockInvoke).toHaveBeenCalledWith("get_subjects", {
+      semesterYearId: "sy-1",
+    });
+    const s = useFilterStore.getState();
     expect(s.subjects).toHaveLength(1);
-    expect(s.subjects[0].name).toBe("Databases");
+    // Single subject auto-selects.
+    expect(s.selectedSubjectId).toBe("sub-1");
+  });
+
+  it("loadSubjects clears subjects when no semester is selected", async () => {
+    useFilterStore.setState({
+      selectedSemesterYearId: null,
+      subjects: [{ id: "sub-1", name: "Databases", code: null, color: null }],
+      selectedSubjectId: "sub-1",
+    });
+
+    await useFilterStore.getState().loadSubjects();
+
+    expect(mockInvoke).not.toHaveBeenCalled();
+    const s = useFilterStore.getState();
+    expect(s.subjects).toHaveLength(0);
+    expect(s.selectedSubjectId).toBeNull();
   });
 
   it("loadData leaves state untouched and does not throw on failure", async () => {

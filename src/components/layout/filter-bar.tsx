@@ -18,6 +18,7 @@ export default function FilterBar() {
     selectedSectionId,
     loaded,
     loadData,
+    loadSubjects,
     loadSections,
     setSelectedSemesterYearId,
     setSelectedSubjectId,
@@ -27,6 +28,13 @@ export default function FilterBar() {
   useEffect(() => {
     if (!loaded) loadData();
   }, [loaded, loadData]);
+
+  // Subjects are semester-scoped: reload whenever the semester changes.
+  // loadSubjects auto-selects a single subject, keeps a valid selection and
+  // clears subject + section otherwise.
+  useEffect(() => {
+    loadSubjects();
+  }, [selectedSemesterYearId, loaded, loadSubjects]);
 
   // Reload sections whenever the semester/subject scope changes.
   // loadSections auto-selects when only one section exists and keeps the
