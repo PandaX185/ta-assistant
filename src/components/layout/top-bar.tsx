@@ -29,8 +29,8 @@ export default function TopBar() {
 
   return (
     <header className="h-12 border-b bg-card flex items-center justify-between px-4 shrink-0">
-      <div className="flex items-center gap-4">
-        <span className="font-semibold text-sm">
+      <div className="flex items-center gap-4 min-w-0">
+        <span className="font-semibold text-sm truncate">
           {t("topbar.app_title")}
         </span>
       </div>

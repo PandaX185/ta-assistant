@@ -229,7 +229,7 @@ export default function Students() {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{t("students.title")}</h1>
           <p className="text-sm text-muted-foreground">
@@ -344,7 +344,7 @@ export default function Students() {
         placeholder="Search by name or ID..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="max-w-xs"
+        className="w-full sm:max-w-xs"
       />
 
       {/* Stats */}
@@ -365,47 +365,44 @@ export default function Students() {
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium">Name</th>
-                <th className="text-left px-4 py-2 font-medium">ID</th>
-                <th className="text-left px-4 py-2 font-medium">Email</th>
-                <th className="text-right px-4 py-2 font-medium w-20">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((enr) => (
-                <tr key={enr.id} className="border-t hover:bg-muted/30 cursor-pointer">
-                  <td
-                    className="px-4 py-2 font-medium text-primary hover:underline"
-                    onClick={() => setDetailEnrollmentId(enr.id)}
-                  >
-                    {enr.student_name}
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                    {enr.student_code ?? "—"}
-                  </td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">
-                    {/* Email not in enrollment query, fetch later */}
-                    —
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEdit(enr);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[420px]">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">Name</th>
+                  <th className="text-left px-4 py-2 font-medium">ID</th>
+                  <th className="text-right px-4 py-2 font-medium w-20">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((enr) => (
+                  <tr key={enr.id} className="border-t hover:bg-muted/30 cursor-pointer">
+                    <td
+                      className="px-4 py-2 font-medium text-primary hover:underline"
+                      onClick={() => setDetailEnrollmentId(enr.id)}
+                    >
+                      {enr.student_name}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                      {enr.student_code ?? "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(enr);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

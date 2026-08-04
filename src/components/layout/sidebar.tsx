@@ -1,27 +1,13 @@
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  Users,
-  ClipboardList,
-  CalendarCheck,
-  Settings,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { to: "/", icon: LayoutDashboard, labelKey: "sidebar.dashboard" },
-  { to: "/students", icon: Users, labelKey: "sidebar.students" },
-  { to: "/grades", icon: ClipboardList, labelKey: "sidebar.grades" },
-  { to: "/attendance", icon: CalendarCheck, labelKey: "sidebar.attendance" },
-  { to: "/settings", icon: Settings, labelKey: "sidebar.settings" },
-];
+import { navItems } from "./nav-items";
 
 export default function Sidebar() {
   const { t } = useTranslation();
 
   return (
-    <aside className="w-16 border-r bg-card flex flex-col items-center py-4 gap-2">
+    <aside className="hidden md:flex w-16 border-r bg-card flex-col items-center py-4 gap-2 shrink-0">
       <div className="text-base font-bold mb-4 tracking-tight" title="TA Assistant">
         TA
       </div>

@@ -35,7 +35,7 @@ function SemesterPicker({
       value={value ?? ""}
       onValueChange={(v) => onChange(v || null)}
     >
-      <SelectTrigger className="w-[220px] h-9 text-sm">
+      <SelectTrigger className="w-full sm:w-[220px] h-9 text-sm">
         <SelectValue placeholder="Select semester" />
       </SelectTrigger>
       <SelectContent>
@@ -98,7 +98,7 @@ function SemesterYearSection() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Semester / Year</h2>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -146,7 +146,8 @@ function SemesterYearSection() {
         </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[320px]">
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-4 py-2 font-medium">Year</th>
@@ -177,6 +178,7 @@ function SemesterYearSection() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </section>
@@ -268,7 +270,7 @@ function SubjectSection() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Subjects</h2>
         <Dialog
           open={open}
@@ -334,7 +336,8 @@ function SubjectSection() {
         </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[360px]">
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-4 py-2 font-medium">Name</th>
@@ -380,6 +383,7 @@ function SubjectSection() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </section>
@@ -481,7 +485,7 @@ function SectionsSection() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Sections</h2>
         <Dialog
           open={open}
@@ -541,7 +545,7 @@ function SectionsSection() {
           value={subjectId ?? ""}
           onValueChange={(v) => setSubjectId(v || null)}
         >
-          <SelectTrigger className="w-[260px] h-9 text-sm">
+          <SelectTrigger className="w-full sm:w-[260px] h-9 text-sm">
             <SelectValue placeholder="Select subject" />
           </SelectTrigger>
           <SelectContent>
@@ -570,7 +574,8 @@ function SectionsSection() {
         </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[360px]">
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-4 py-2 font-medium">Name</th>
@@ -615,6 +620,7 @@ function SectionsSection() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

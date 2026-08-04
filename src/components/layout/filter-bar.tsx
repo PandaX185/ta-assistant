@@ -44,8 +44,8 @@ export default function FilterBar() {
   }, [selectedSemesterYearId, selectedSubjectId, loaded, loadSections]);
 
   return (
-    <div className="h-11 border-b bg-muted/30 flex items-center gap-3 px-4 shrink-0">
-      <div className="flex items-center gap-2 text-sm flex-1">
+    <div className="border-b bg-muted/30 px-4 py-2 shrink-0 sm:py-0 sm:flex sm:items-center sm:h-11">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:flex-1">
         {/* Semester/Year dropdown */}
         <Select
           value={selectedSemesterYearId ?? ""}
@@ -54,7 +54,7 @@ export default function FilterBar() {
             setSelectedSubjectId(null);
           }}
         >
-          <SelectTrigger className="w-[180px] h-8 text-xs">
+          <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
             <SelectValue placeholder="Semester / Year" />
           </SelectTrigger>
           <SelectContent>
@@ -76,7 +76,7 @@ export default function FilterBar() {
           value={selectedSubjectId ?? ""}
           onValueChange={(val) => setSelectedSubjectId(val || null)}
         >
-          <SelectTrigger className="w-[200px] h-8 text-xs">
+          <SelectTrigger className="w-full sm:w-[200px] h-8 text-xs">
             <SelectValue placeholder="Subject" />
           </SelectTrigger>
           <SelectContent>
@@ -100,7 +100,7 @@ export default function FilterBar() {
             value={selectedSectionId ?? ""}
             onValueChange={(val) => setSelectedSectionId(val || null)}
           >
-            <SelectTrigger className="w-[160px] h-8 text-xs">
+            <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs">
               <SelectValue placeholder="Section" />
             </SelectTrigger>
             <SelectContent>
