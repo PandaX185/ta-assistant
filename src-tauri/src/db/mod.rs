@@ -16,6 +16,10 @@ pub fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
 pub fn open_db(app: &AppHandle) -> Result<Connection, String> {
     let path = db_path(app)?;
     let conn = Connection::open(&path).map_err(|e| format!("Failed to open database: {e}"))?;
+    // Enable foreign keys so ON DELETE CASCADE actually works in the app
+    // (SQLite defaults this to OFF per connection).
+    conn.pragma_update(None, "foreign_keys", true)
+        .map_err(|e| format!("Failed to enable foreign keys: {e}"))?;
     migrations::run_pending(&conn)?;
     Ok(conn)
 }
