@@ -1,10 +1,10 @@
 {
   "onboarding": {
-    "welcome": "مرحباً بك في ",
+    "welcome": "مرحباً بك في المساعد الأكاديمي",
     "choose_language": "اختر لغتك المفضلة",
     "english": "English",
     "arabic": "العربية",
-    "theme": "المظهر",
+    "theme": "لون التطبيق",
     "light": "فاتح",
     "dark": "داكن",
     "profile": "بياناتك الشخصية",
@@ -22,7 +22,7 @@
     "confirm_placeholder": "أعد كتابة كلمة المرور",
     "confirm_mismatch": "كلمتا المرور غير متطابقتين",
     "shortcut": "اختصار عام",
-    "shortcut_desc": "اضغط على مجموعة مفاتيح لفتح نافذة البحث من أي مكان",
+    "shortcut_desc": "اضغط على الكيبورد لفتح البحث من أي مكان",
     "shortcut_label": "الاختصار",
     "shortcut_hint": "اضغط على الحقل ثم اضغط الاختصار المطلوب",
     "back": "رجوع",
@@ -38,7 +38,7 @@
     "settings": "الإعدادات"
   },
   "topbar": {
-    "app_title": "مساعد المعيد",
+    "app_title": "المساعد الأكاديمي",
     "search_hint": "بحث (Ctrl+Shift+P)"
   },
   "dashboard": {
@@ -62,7 +62,7 @@
     "coming_soon": "قريباً."
   },
   "lock": {
-    "title": "مساعد المعيد",
+    "title": "المساعد الأكاديمي",
     "description": "أدخل كلمة المرور لفتح التطبيق",
     "password_placeholder": "كلمة المرور",
     "unlock": "فتح",
