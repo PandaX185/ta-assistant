@@ -54,3 +54,6 @@ coverage/
 *.db-wal
 *.db-shm
 /plan/
+
+# Signing keystore (never commit)
+release.keystore
