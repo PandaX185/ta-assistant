@@ -57,3 +57,7 @@ coverage/
 
 # Signing keystore (never commit)
 release.keystore
+
+# Android signing config (contains keystore secrets) + local SDK paths
+keystore.properties
+local.properties
