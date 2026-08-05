@@ -125,6 +125,47 @@ pub fn run_pending(conn: &Connection) -> Result<(), String> {
         }
     }
 
+    // One-time adoption of tauri-plugin-sql's tracking table.
+    // Older builds also registered these migrations with the sql plugin
+    // (sqlx Migrator), which tracks them in `_sqlx_migrations`. On installs
+    // where the plugin's runner created the schema first (e.g. fresh Android),
+    // `_schema_migrations` is empty while the tables already exist — re-running
+    // migration 1 would fail with "table preferences already exists". Adopt
+    // the successfully-applied plugin versions so we skip them. Fresh installs
+    // and current desktop DBs have no `_sqlx_migrations` table, so this is a no-op.
+    if applied.is_empty() {
+        let plugin_tracking_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = '_sqlx_migrations'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to check _sqlx_migrations table: {e}"))?;
+
+        if plugin_tracking_exists > 0 {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT version FROM _sqlx_migrations
+                     WHERE success = 1 ORDER BY version",
+                )
+                .map_err(|e| format!("Failed to query plugin-applied migrations: {e}"))?;
+            let rows = stmt
+                .query_map([], |row| row.get::<_, i64>(0))
+                .map_err(|e| format!("Failed to read plugin-applied migrations: {e}"))?;
+            for row in rows {
+                let version =
+                    row.map_err(|e| format!("Failed to read plugin-applied migration row: {e}"))?;
+                conn.execute(
+                    "INSERT OR IGNORE INTO _schema_migrations (version) VALUES (?1)",
+                    rusqlite::params![version],
+                )
+                .map_err(|e| format!("Failed to adopt plugin-applied migration {version}: {e}"))?;
+                applied.push(version);
+            }
+        }
+    }
+
     let all = get_migrations();
 
     // Some migrations rebuild tables (DROP TABLE + RENAME). With foreign keys
@@ -162,7 +203,60 @@ pub fn run_pending(conn: &Connection) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use super::{get_migrations, run_pending};
     use crate::commands::test_utils;
+    use rusqlite::Connection;
+
+    #[test]
+    fn adopts_plugin_tracking_when_schema_already_exists() {
+        // Simulates a fresh install where tauri-plugin-sql (sqlx Migrator)
+        // created the schema first: its `_sqlx_migrations` table exists and
+        // the preferences table is already there, but `_schema_migrations`
+        // does not. run_pending must adopt the plugin's versions instead of
+        // re-running migration 1 ("table preferences already exists").
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch(
+            "CREATE TABLE _sqlx_migrations (
+                version         BIGINT PRIMARY KEY NOT NULL,
+                description     TEXT NOT NULL,
+                installed_on    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                success         BOOLEAN NOT NULL,
+                checksum        BLOB NOT NULL,
+                execution_time  BIGINT NOT NULL
+            );
+            INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
+            VALUES (1, 'create preferences table', 1, x'00', 0);
+            -- a failed plugin migration: must NOT be adopted, run_pending re-runs it
+            INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
+            VALUES (2, 'create semester_years table', 0, x'00', 0);",
+        )
+        .expect("create fake plugin tracking");
+        conn.execute_batch(include_str!("../../migrations/001_create_preferences.sql"))
+            .expect("create preferences like the plugin did");
+
+        run_pending(&conn).expect("run_pending should not conflict with plugin-created schema");
+
+        let applied: Vec<i64> = {
+            let mut stmt = conn
+                .prepare("SELECT version FROM _schema_migrations ORDER BY version")
+                .expect("prepare");
+            let rows = stmt
+                .query_map([], |row| row.get::<_, i64>(0))
+                .expect("query");
+            rows.map(|r| r.expect("row")).collect()
+        };
+        assert_eq!(applied.len(), get_migrations().len());
+        assert!(applied.contains(&1), "adopted plugin-applied version 1");
+        assert!(applied.contains(&2), "failed plugin row not adopted; migration 2 re-run");
+        let semester_years_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'semester_years'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("count");
+        assert_eq!(semester_years_count, 1, "migration 2 took effect after re-run");
+    }
 
     /// Migration 015 rebuilds lectures/enrollments with per-section uniqueness:
     /// - one student row can enroll in two sections of the same subject

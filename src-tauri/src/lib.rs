@@ -5,11 +5,15 @@ use tauri::Emitter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default().plugin(
-        tauri_plugin_sql::Builder::default()
-            .add_migrations("sqlite:ta-assistant.db", db::migrations::get_migrations())
-            .build(),
-    );
+    // NOTE: migrations are NOT registered with the sql plugin anymore. They
+    // run exclusively through db::migrations::run_pending() on the Rust side
+    // (open_db), so there is a single migration runner. Previously both this
+    // plugin and run_pending executed the same migrations against the same
+    // file but tracked them in separate tables (_sqlx_migrations vs
+    // _schema_migrations), which made the second runner fail with
+    // "table preferences already exists" on fresh installs (e.g. Android).
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_sql::Builder::default().build());
 
     // Desktop-only: the global-shortcut plugin (global-hotkey) has no
     // Android/iOS support. Registered under #[cfg(desktop)] so mobile builds
