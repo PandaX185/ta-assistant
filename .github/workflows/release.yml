@@ -139,6 +139,12 @@ jobs:
       - name: Init Android project
         run: npx tauri android init
 
+      # The stock template has no release signing config (it only exists locally
+      # in the gitignored gen/ dir). Inject it so gradle signs the APK; the
+      # script fails loudly if the generated file drifts from the template.
+      - name: Wire release signing into generated gradle config
+        run: node scripts/android-signing-patch.mjs
+
       # Signing material lives only in GitHub secrets (same layout as `make android-key-setup`)
       - name: Inject signing keystore from secrets
         env:
