@@ -38,7 +38,7 @@ pub struct AssignmentDetailItem {
 
 #[derive(Serialize)]
 pub struct AttendanceDetailItem {
-    pub id: String,
+    pub id: Option<String>,
     pub lecture_id: String,
     pub lecture_date: String,
     pub lecture_title: Option<String>,
@@ -325,14 +325,14 @@ fn get_student_detail_impl(
         .filter_map(|r| r.ok())
         .collect();
 
-    // Get attendance
+    // Get attendance: one row per lecture in the student's section, so the
+    // denominator is the real lecture count (unmarked lectures show as absent).
     let mut attstmt = conn
         .prepare(
-            "SELECT a.id, l.id, l.date, l.title, a.status
-             FROM attendance a
-             JOIN lectures l ON l.id = a.lecture_id
-             JOIN enrollments e ON e.id = a.enrollment_id
-             WHERE a.enrollment_id = ?1
+            "SELECT a.id, l.id, l.date, l.title, COALESCE(a.status, 'absent')
+             FROM lectures l
+             JOIN enrollments e ON e.id = ?1 AND e.section_id = l.section_id
+             LEFT JOIN attendance a ON a.lecture_id = l.id AND a.enrollment_id = e.id
              ORDER BY l.date",
         )
         .map_err(|e| format!("Attendance query failed: {e}"))?;
@@ -549,7 +549,13 @@ mod tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO lectures (id, subject_id, semester_year_id, title, date) VALUES ('l1', ?1, ?2, 'Intro', '2026-02-01')",
+            "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date) VALUES ('l1', ?1, ?2, 'sec-1', 'Intro', '2026-02-01')",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        // Second lecture with no attendance row: must show as absent, not be dropped
+        conn.execute(
+            "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date) VALUES ('l2', ?1, ?2, 'sec-1', 'No Show', '2026-02-08')",
             rusqlite::params![sub, sy],
         )
         .unwrap();
@@ -573,9 +579,12 @@ mod tests {
         assert_eq!(d.quizzes[0].score, Some(8.5));
         assert_eq!(d.assignments.len(), 1);
         assert_eq!(d.assignments[0].score, Some(4.0));
-        assert_eq!(d.attendance.len(), 1);
+        assert_eq!(d.attendance.len(), 2);
         assert_eq!(d.attendance[0].status, "present");
         assert_eq!(d.attendance[0].lecture_title.as_deref(), Some("Intro"));
+        assert_eq!(d.attendance[1].status, "absent");
+        assert_eq!(d.attendance[1].id, None);
+        assert_eq!(d.attendance[1].lecture_title.as_deref(), Some("No Show"));
         assert_eq!(d.bonuses.len(), 1);
         assert_eq!(d.bonuses[0].value, 1.0);
         assert_eq!(d.bonuses[0].reason, "Participation");

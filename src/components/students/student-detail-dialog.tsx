@@ -34,7 +34,7 @@ interface AssignmentItem {
 }
 
 interface AttendanceItem {
-  id: string;
+  id: string | null;
   lecture_id: string;
   lecture_date: string;
   lecture_title: string | null;
@@ -238,7 +238,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                       </thead>
                       <tbody>
                         {detail.attendance.map((a) => (
-                          <tr key={a.id} className="border-t">
+                          <tr key={a.id ?? a.lecture_id} className="border-t">
                             <td className="px-3 py-1.5 font-mono text-xs">{a.lecture_date}</td>
                             <td className="px-3 py-1.5">{a.lecture_title ?? "—"}</td>
                             <td className="px-3 py-1.5 text-right">
