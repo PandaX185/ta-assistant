@@ -247,7 +247,10 @@ mod tests {
         };
         assert_eq!(applied.len(), get_migrations().len());
         assert!(applied.contains(&1), "adopted plugin-applied version 1");
-        assert!(applied.contains(&2), "failed plugin row not adopted; migration 2 re-run");
+        assert!(
+            applied.contains(&2),
+            "failed plugin row not adopted; migration 2 re-run"
+        );
         let semester_years_count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name = 'semester_years'",
@@ -255,7 +258,10 @@ mod tests {
                 |r| r.get(0),
             )
             .expect("count");
-        assert_eq!(semester_years_count, 1, "migration 2 took effect after re-run");
+        assert_eq!(
+            semester_years_count, 1,
+            "migration 2 took effect after re-run"
+        );
     }
 
     /// Migration 015 rebuilds lectures/enrollments with per-section uniqueness:
