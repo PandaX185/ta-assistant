@@ -36,7 +36,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          if ID=$(gh release view "$TAG" --json id --jq .id 2>/dev/null); then
+          # NOTE: use `gh api` — `gh release view --json id` returns the opaque
+          # GraphQL node id, but tauri-action needs the numeric REST release id.
+          if ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id 2>/dev/null); then
             echo "Release $TAG already exists (id $ID) — reusing it, assets will be refreshed"
           else
             echo "Creating release $TAG…"
@@ -44,7 +46,7 @@ jobs:
               --title "TA Assistant $TAG" \
               --target "$GITHUB_SHA" \
               --generate-notes
-            ID=$(gh release view "$TAG" --json id --jq .id)
+            ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)
           fi
           echo "release_id=$ID" >> "$GITHUB_OUTPUT"
 
