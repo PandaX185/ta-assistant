@@ -10,6 +10,15 @@
 ANDROID_HOME ?= $(shell { [ -d "$(HOME)/Android/Sdk" ] && echo "$(HOME)/Android/Sdk"; } || { [ -d /opt/android-sdk ] && echo /opt/android-sdk; })
 export ANDROID_HOME
 
+# Android NDK location. tauri-cli reads NDK_HOME (NOT ANDROID_NDK_HOME) when
+# validating the Android environment, so we export both. Auto-detects an NDK
+# inside the user SDK first (~/Android/Sdk/ndk/<version>, newest), then falls
+# back to the system NDK (/opt/android-ndk). Override per-invocation if needed:
+#   make android-apk NDK_HOME=/path/to/ndk
+NDK_HOME ?= $(shell { if [ -d "$(HOME)/Android/Sdk/ndk" ]; then ls -d "$(HOME)"/Android/Sdk/ndk/*/ 2>/dev/null | sort -V | tail -1 | sed 's:/$$::'; elif [ -d /opt/android-ndk ]; then echo /opt/android-ndk; fi; })
+ANDROID_NDK_HOME = $(NDK_HOME)
+export NDK_HOME ANDROID_NDK_HOME
+
 # ─── Default ───────────────────────────────────────────
 all: install
 
