@@ -69,6 +69,7 @@ describe("Students", () => {
         query: "2026-0077",
       }),
     );
+    expect(invoke).toHaveBeenCalledWith("find_students", { query: "Ziad" });
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("create_student", {
         name: "Ziad",
@@ -109,6 +110,7 @@ describe("Students", () => {
     await waitFor(() =>
       expect(screen.getByText("Ziad Ahmed")).toBeInTheDocument(),
     );
+    expect(invoke).toHaveBeenCalledWith("find_students", { query: "Ziad" });
     expect(invoke).not.toHaveBeenCalledWith(
       "create_student",
       expect.anything(),
@@ -166,5 +168,148 @@ describe("Students", () => {
       studentId: "stu-new",
       ...enrollmentsCall,
     });
+  });
+
+  it("reuses an existing student by name when no ID is provided", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_enrollments") return Promise.resolve([]);
+      if (cmd === "find_students")
+        return Promise.resolve([
+          { id: "stu-old", name: "Ziad Ahmed", email: null, student_id: null },
+        ]);
+      return Promise.resolve(undefined);
+    });
+
+    const user = userEvent.setup();
+    render(<Students />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_enrollments", enrollmentsCall),
+    );
+
+    await user.click(screen.getByRole("button", { name: "+ Add Student" }));
+    await user.type(screen.getByLabelText("Name"), "Ziad");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    // Only the name query runs — no ID to search by
+    const findCalls = vi
+      .mocked(invoke)
+      .mock.calls.filter(([cmd]) => cmd === "find_students");
+    expect(findCalls).toHaveLength(1);
+    expect(findCalls[0]).toEqual(["find_students", { query: "Ziad" }]);
+
+    await waitFor(() =>
+      expect(screen.getByText("Ziad Ahmed")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: "Use existing" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("create_enrollment", {
+        studentId: "stu-old",
+        ...enrollmentsCall,
+      }),
+    );
+    expect(invoke).not.toHaveBeenCalledWith(
+      "create_student",
+      expect.anything(),
+    );
+  });
+
+  it("merges and dedupes name and ID matches", async () => {
+    const stu1 = {
+      id: "stu-1",
+      name: "Ziad Ahmed",
+      email: null,
+      student_id: "2026-0077",
+    };
+    const stu2 = {
+      id: "stu-2",
+      name: "Ziad Khaled",
+      email: null,
+      student_id: "2026-0099",
+    };
+    vi.mocked(invoke).mockImplementation(
+      (cmd: string, args?: unknown) => {
+        if (cmd === "get_enrollments") return Promise.resolve([]);
+        if (cmd === "find_students") {
+          const q = String(
+            (args as { query?: string } | undefined)?.query ?? "",
+          );
+          if (q === "Ziad") return Promise.resolve([stu1]);
+          if (q === "2026-0077") return Promise.resolve([stu1, stu2]);
+          return Promise.resolve([]);
+        }
+        return Promise.resolve(undefined);
+      },
+    );
+
+    const user = userEvent.setup();
+    render(<Students />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_enrollments", enrollmentsCall),
+    );
+
+    await user.click(screen.getByRole("button", { name: "+ Add Student" }));
+    await user.type(screen.getByLabelText("Name"), "Ziad");
+    await user.type(screen.getByLabelText("Student ID (optional)"), "2026-0077");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Ziad Khaled")).toBeInTheDocument(),
+    );
+    // stu-1 matched by both queries but appears once
+    expect(screen.getAllByText("Ziad Ahmed")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Use existing" })).toHaveLength(2);
+  });
+
+  it("shows already-enrolled matches as grayed out", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_enrollments")
+        return Promise.resolve([
+          {
+            id: "enr-1",
+            student_id: "stu-old",
+            semester_year_id: "sy-1",
+            subject_id: "sub-1",
+            student_name: "Ziad Ahmed",
+            student_code: "2026-0077",
+          },
+        ]);
+      if (cmd === "find_students")
+        return Promise.resolve([
+          {
+            id: "stu-old",
+            name: "Ziad Ahmed",
+            email: null,
+            student_id: "2026-0077",
+          },
+        ]);
+      if (cmd === "create_student") return Promise.resolve("stu-new");
+      return Promise.resolve(undefined);
+    });
+
+    const user = userEvent.setup();
+    render(<Students />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_enrollments", enrollmentsCall),
+    );
+
+    await user.click(screen.getByRole("button", { name: "+ Add Student" }));
+    await user.type(screen.getByLabelText("Name"), "Ziad");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    // Already-enrolled match: button disabled with the label instead of "Use existing"
+    const enrolledBtn = await screen.findByRole("button", {
+      name: "Already enrolled",
+    });
+    expect(enrolledBtn).toBeDisabled();
+
+    // "Create new anyway" still works
+    await user.click(screen.getByRole("button", { name: "Create new anyway" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("create_student", {
+        name: "Ziad",
+        email: null,
+        studentId: null,
+      }),
+    );
   });
 });

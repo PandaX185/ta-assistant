@@ -171,15 +171,21 @@ export default function Students() {
         loadEnrollments();
         return;
       }
-      // find-or-create: dedupe on the university ID before creating a new student
-      if (studentId.trim()) {
-        const found = await invoke<StudentMatch[]>("find_students", {
-          query: studentId.trim(),
-        });
-        if (found.length > 0) {
-          setMatches(found);
-          return; // show picker; do not create yet
-        }
+      // find-or-create: search by name (and ID when provided) before creating,
+      // so existing students are reused across subjects instead of duplicated
+      const queries = [name.trim()];
+      if (studentId.trim()) queries.push(studentId.trim());
+      const results = await Promise.all(
+        queries.map((q) =>
+          invoke<StudentMatch[]>("find_students", { query: q }),
+        ),
+      );
+      const merged = Array.from(
+        new Map(results.flat().map((m) => [m.id, m])).values(),
+      );
+      if (merged.length > 0) {
+        setMatches(merged);
+        return; // show picker; do not create yet
       }
       await createNewStudent();
     } catch (e) {
@@ -212,6 +218,10 @@ export default function Students() {
           (e.student_code ?? "").toLowerCase().includes(search.toLowerCase()),
       )
     : enrollments;
+
+  // Student ids already enrolled in the current section — their "Use existing"
+  // button is disabled to avoid a duplicate-enrollment constraint error.
+  const enrolledIds = new Set(enrollments.map((e) => e.student_id));
 
   // No filter → empty state
   if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
@@ -299,23 +309,34 @@ export default function Students() {
                   <p className="px-3 py-2 text-xs font-medium text-muted-foreground">
                     Existing student{matches.length !== 1 ? "s" : ""} found — reuse instead of duplicating?
                   </p>
-                  {matches.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{m.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono truncate">
-                          {m.student_id ?? "—"}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => useExistingStudent(m.id)}
+                  {matches.map((m) => {
+                    const alreadyEnrolled = enrolledIds.has(m.id);
+                    return (
+                      <div
+                        key={m.id}
+                        className={`flex items-center justify-between gap-2 px-3 py-2 ${
+                          alreadyEnrolled ? "opacity-60" : ""
+                        }`}
                       >
-                        Use existing
-                      </Button>
-                    </div>
-                  ))}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{m.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono truncate">
+                            {m.student_id ?? "—"}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={alreadyEnrolled}
+                          onClick={() => useExistingStudent(m.id)}
+                        >
+                          {alreadyEnrolled
+                            ? "Already enrolled"
+                            : "Use existing"}
+                        </Button>
+                      </div>
+                    );
+                  })}
                   <div className="px-3 py-2">
                     <Button
                       size="sm"
