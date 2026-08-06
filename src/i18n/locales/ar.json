@@ -47,7 +47,24 @@
   },
   "students": {
     "title": "الطلاب",
-    "no_filter": "لم يتم تحديد فلتر."
+    "no_filter": "لم يتم تحديد فلتر.",
+    "add_student": "+ إضافة طالب",
+    "new_student": "طالب جديد",
+    "edit_student": "تعديل طالب",
+    "editing_student": "تعديل بيانات الطالب",
+    "name": "الاسم",
+    "name_placeholder": "اسم الطالب",
+    "email_optional": "البريد الإلكتروني (اختياري)",
+    "email_placeholder": "student@university.edu",
+    "student_id_optional": "الرقم الجامعي (اختياري)",
+    "student_id_placeholder": "مثال: 2024001",
+    "will_be_enrolled_in": "سيتم تسجيله في",
+    "matches_found": "تم العثور على طلاب موجودين — إعادة استخدامهم بدلاً من التكرار؟",
+    "already_enrolled": "مسجّل بالفعل",
+    "use_existing": "استخدام الموجود",
+    "create_new_anyway": "إنشاء جديد على أي حال",
+    "create": "إنشاء",
+    "update": "تحديث"
   },
   "grades": {
     "title": "الدرجات",
@@ -59,7 +76,8 @@
   },
   "settings": {
     "title": "الإعدادات",
-    "coming_soon": "قريباً."
+    "coming_soon": "قريباً.",
+    "version": "الإصدار"
   },
   "lock": {
     "title": "المساعد الأكاديمي",

@@ -254,19 +254,23 @@ export default function Students() {
           }}
         >
           <DialogTrigger asChild>
-            <Button size="sm">+ Add Student</Button>
+            <Button size="sm">{t("students.add_student")}</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editId ? "Edit Student" : "New Student"}</DialogTitle>
-              {editId && <DialogDescription>Editing student info</DialogDescription>}
+              <DialogTitle>
+                {editId ? t("students.edit_student") : t("students.new_student")}
+              </DialogTitle>
+              {editId && (
+                <DialogDescription>{t("students.editing_student")}</DialogDescription>
+              )}
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label htmlFor="s-name">Name</Label>
+                <Label htmlFor="s-name">{t("students.name")}</Label>
                 <Input
                   id="s-name"
-                  placeholder="Student name"
+                  placeholder={t("students.name_placeholder")}
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);
@@ -275,20 +279,20 @@ export default function Students() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="s-email">Email (optional)</Label>
+                <Label htmlFor="s-email">{t("students.email_optional")}</Label>
                 <Input
                   id="s-email"
                   type="email"
-                  placeholder="student@university.edu"
+                  placeholder={t("students.email_placeholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="s-id">Student ID (optional)</Label>
+                <Label htmlFor="s-id">{t("students.student_id_optional")}</Label>
                 <Input
                   id="s-id"
-                  placeholder="e.g. 2024001"
+                  placeholder={t("students.student_id_placeholder")}
                   value={studentId}
                   onChange={(e) => {
                     setStudentId(e.target.value);
@@ -298,16 +302,20 @@ export default function Students() {
               </div>
               {!editId && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Will be enrolled in <span className="font-medium">{selectedSubject?.name}</span>
+                  {t("students.will_be_enrolled_in")}{" "}
+                  <span className="font-medium">{selectedSubject?.name}</span>
                   {selectedSection && (
-                    <> · <span className="font-medium">{selectedSection.name}</span></>
+                    <>
+                      {" · "}
+                      <span className="font-medium">{selectedSection.name}</span>
+                    </>
                   )}
                 </p>
               )}
               {!editId && matches.length > 0 && (
                 <div className="border rounded-lg divide-y">
                   <p className="px-3 py-2 text-xs font-medium text-muted-foreground">
-                    Existing student{matches.length !== 1 ? "s" : ""} found — reuse instead of duplicating?
+                    {t("students.matches_found")}
                   </p>
                   {matches.map((m) => {
                     const alreadyEnrolled = enrolledIds.has(m.id);
@@ -331,8 +339,8 @@ export default function Students() {
                           onClick={() => useExistingStudent(m.id)}
                         >
                           {alreadyEnrolled
-                            ? "Already enrolled"
-                            : "Use existing"}
+                            ? t("students.already_enrolled")
+                            : t("students.use_existing")}
                         </Button>
                       </div>
                     );
@@ -347,13 +355,13 @@ export default function Students() {
                         createNewStudent();
                       }}
                     >
-                      Create new anyway
+                      {t("students.create_new_anyway")}
                     </Button>
                   </div>
                 </div>
               )}
               <Button onClick={handleSave} className="w-full">
-                {editId ? "Update" : "Create"}
+                {editId ? t("students.update") : t("students.create")}
               </Button>
             </div>
           </DialogContent>

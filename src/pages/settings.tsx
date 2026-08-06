@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -662,12 +663,26 @@ export default function Settings() {
   const [tab, setTab] = useState<"semesters" | "subjects" | "sections">(
     "semesters",
   );
+  const [version, setVersion] = useState<string | null>(null);
   const openGuide = useUIStore((s) => s.openGuide);
+
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => setVersion(null));
+  }, []);
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
+        <div>
+          <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
+          {version && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {t("settings.version")} {version}
+            </p>
+          )}
+        </div>
         <Button variant="outline" size="sm" onClick={openGuide}>
           <HelpCircle />
           {t("guide.show_again")}

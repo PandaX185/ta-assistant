@@ -55,7 +55,24 @@
   },
   "students": {
     "title": "Students",
-    "no_filter": "No filter selected."
+    "no_filter": "No filter selected.",
+    "add_student": "+ Add Student",
+    "new_student": "New Student",
+    "edit_student": "Edit Student",
+    "editing_student": "Editing student info",
+    "name": "Name",
+    "name_placeholder": "Student name",
+    "email_optional": "Email (optional)",
+    "email_placeholder": "student@university.edu",
+    "student_id_optional": "Student ID (optional)",
+    "student_id_placeholder": "e.g. 2024001",
+    "will_be_enrolled_in": "Will be enrolled in",
+    "matches_found": "Existing students found — reuse instead of duplicating?",
+    "already_enrolled": "Already enrolled",
+    "use_existing": "Use existing",
+    "create_new_anyway": "Create new anyway",
+    "create": "Create",
+    "update": "Update"
   },
   "grades": {
     "title": "Grades",
@@ -67,7 +84,8 @@
   },
   "settings": {
     "title": "Settings",
-    "coming_soon": "Coming soon."
+    "coming_soon": "Coming soon.",
+    "version": "Version"
   },
   "guide": {
     "intro_title": "Welcome!",
