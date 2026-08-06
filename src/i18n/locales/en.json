@@ -68,5 +68,19 @@
   "settings": {
     "title": "Settings",
     "coming_soon": "Coming soon."
+  },
+  "guide": {
+    "intro_title": "Welcome!",
+    "intro_desc": "Here's a quick tour of your workspace. You can skip it and replay it anytime from Settings.",
+    "dashboard_desc": "See your students, attendance and grades at a glance.",
+    "students_desc": "Manage students, enroll them in subjects and sections, and reuse existing students instead of duplicating them.",
+    "grades_desc": "Record quiz and assignment grades for each section.",
+    "attendance_desc": "Mark attendance lecture by lecture, with a history per section.",
+    "settings_desc": "Manage semesters, subjects and sections, plus language, theme and your password.",
+    "skip": "Skip",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "show_again": "Show guide again"
   }
 }

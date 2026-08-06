@@ -10,6 +10,7 @@ import { useFilterStore } from "@/stores/filter-store";
 import Shell from "@/components/layout/shell";
 import OnboardingWizard from "@/components/onboarding/wizard";
 import LockScreen from "@/components/lock-screen";
+import TabGuide from "@/components/guide/tab-guide";
 import { SpotlightSearch } from "@/components/search/spotlight";
 import Dashboard from "@/pages/dashboard";
 import Students from "@/pages/students";
@@ -66,8 +67,11 @@ export default function App() {
   const [checking, setChecking] = useState(true);
   const [hasPrefs, setHasPrefs] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  const [guideSeen, setGuideSeen] = useState(false);
   const setLocale = useLocaleStore((s) => s.setLocale);
   const setDarkMode = useUIStore((s) => s.setDarkMode);
+  const guideOpen = useUIStore((s) => s.guideOpen);
+  const closeGuide = useUIStore((s) => s.closeGuide);
 
   useEffect(() => {
     Database.load("sqlite:ta-assistant.db")
@@ -77,10 +81,12 @@ export default function App() {
           const prefs = raw as {
             locale: string;
             theme: string;
+            guide_seen: boolean;
           };
           applyLocale(prefs.locale);
           setLocale(prefs.locale);
           setDarkMode(prefs.theme === "dark");
+          setGuideSeen(prefs.guide_seen);
           setHasPrefs(true);
         }
       })
@@ -107,6 +113,16 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppContent />
+      <TabGuide
+        open={unlocked && (guideOpen || !guideSeen)}
+        onClose={() => {
+          closeGuide();
+          if (!guideSeen) {
+            setGuideSeen(true);
+            invoke("set_guide_seen", { seen: true }).catch(console.error);
+          }
+        }}
+      />
     </BrowserRouter>
   );
 }

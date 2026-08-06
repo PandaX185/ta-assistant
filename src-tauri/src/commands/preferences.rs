@@ -16,6 +16,7 @@ pub struct Preferences {
     pub global_shortcut: String,
     pub auto_lock_minutes: i64,
     pub created_at: String,
+    pub guide_seen: bool,
 }
 
 #[tauri::command]
@@ -27,7 +28,7 @@ pub fn get_preferences(app: AppHandle) -> Result<Option<Preferences>, String> {
 fn get_preferences_impl(conn: &Connection) -> Result<Option<Preferences>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT name, email, locale, theme, global_shortcut, auto_lock_minutes, created_at
+            "SELECT name, email, locale, theme, global_shortcut, auto_lock_minutes, created_at, guide_seen
              FROM preferences WHERE id = 1",
         )
         .map_err(|e| format!("Query prepare failed: {e}"))?;
@@ -41,6 +42,7 @@ fn get_preferences_impl(conn: &Connection) -> Result<Option<Preferences>, String
             global_shortcut: row.get(4)?,
             auto_lock_minutes: row.get(5)?,
             created_at: row.get(6)?,
+            guide_seen: row.get::<_, i64>(7)? != 0,
         })
     });
 
@@ -145,6 +147,21 @@ fn update_locale_impl(conn: &Connection, locale: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn set_guide_seen(app: AppHandle, seen: bool) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    set_guide_seen_impl(&conn, seen)
+}
+
+fn set_guide_seen_impl(conn: &Connection, seen: bool) -> Result<(), String> {
+    conn.execute(
+        "UPDATE preferences SET guide_seen = ?1 WHERE id = 1",
+        rusqlite::params![seen],
+    )
+    .map_err(|e| format!("Update guide_seen failed: {e}"))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,5 +243,20 @@ mod tests {
         let conn = saved_conn();
         update_locale_impl(&conn, "ar".into()).unwrap();
         assert_eq!(get_preferences_impl(&conn).unwrap().unwrap().locale, "ar");
+    }
+
+    #[test]
+    fn guide_seen_defaults_to_false() {
+        let conn = saved_conn();
+        assert!(!get_preferences_impl(&conn).unwrap().unwrap().guide_seen);
+    }
+
+    #[test]
+    fn set_guide_seen_persists() {
+        let conn = saved_conn();
+        set_guide_seen_impl(&conn, true).unwrap();
+        assert!(get_preferences_impl(&conn).unwrap().unwrap().guide_seen);
+        set_guide_seen_impl(&conn, false).unwrap();
+        assert!(!get_preferences_impl(&conn).unwrap().unwrap().guide_seen);
     }
 }

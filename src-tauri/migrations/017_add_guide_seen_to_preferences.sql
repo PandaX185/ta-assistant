@@ -1,0 +1,1 @@
+ALTER TABLE preferences ADD COLUMN guide_seen INTEGER NOT NULL DEFAULT 0;

@@ -99,6 +99,12 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/016_subjects_semester_scoped.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 17,
+            description: "add guide_seen flag to preferences",
+            sql: include_str!("../../migrations/017_add_guide_seen_to_preferences.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

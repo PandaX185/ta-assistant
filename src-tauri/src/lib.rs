@@ -44,6 +44,7 @@ pub fn run() {
             commands::preferences::verify_password,
             commands::preferences::update_theme,
             commands::preferences::update_locale,
+            commands::preferences::set_guide_seen,
             commands::filters::get_semester_years,
             commands::filters::get_subjects,
             commands::filters::create_semester_year,

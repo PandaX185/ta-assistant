@@ -3,14 +3,18 @@ import { create } from "zustand";
 export interface UIState {
   sidebarOpen: boolean;
   darkMode: boolean;
+  guideOpen: boolean;
   toggleSidebar: () => void;
   toggleDarkMode: () => void;
   setDarkMode: (dark: boolean) => void;
+  openGuide: () => void;
+  closeGuide: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
   darkMode: false,
+  guideOpen: false,
   setDarkMode: (dark) => {
     document.documentElement.classList.toggle("dark", dark);
     set({ darkMode: dark });
@@ -22,4 +26,6 @@ export const useUIStore = create<UIState>((set) => ({
       document.documentElement.classList.toggle("dark", next);
       return { darkMode: next };
     }),
+  openGuide: () => set({ guideOpen: true }),
+  closeGuide: () => set({ guideOpen: false }),
 }));

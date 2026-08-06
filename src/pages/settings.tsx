@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useFilterStore, Subject, Section } from "@/stores/filter-store";
+import { useUIStore } from "@/stores/ui-store";
 
 /* ───── Shared bits ───── */
 
@@ -660,10 +662,17 @@ export default function Settings() {
   const [tab, setTab] = useState<"semesters" | "subjects" | "sections">(
     "semesters",
   );
+  const openGuide = useUIStore((s) => s.openGuide);
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
+        <Button variant="outline" size="sm" onClick={openGuide}>
+          <HelpCircle />
+          {t("guide.show_again")}
+        </Button>
+      </div>
 
       <div className="flex gap-2 border-b pb-0">
         <button
