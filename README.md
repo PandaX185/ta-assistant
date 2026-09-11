@@ -11,6 +11,7 @@ A local-first desktop app for university teaching assistants. Track students, gr
 - **Spotlight Search** — `Ctrl+Shift+P` to find any student; selecting one jumps straight to their detail view
 - **Grading** — quizzes and assignments with max scores; one tab per item with inline score editing capped at the max
 - **Attendance** — lecture-based checklists; select a lecture and tick the students who showed up
+- **Lecture Materials** — per-lecture markdown notes, file attachments, and reference links, opened in your system apps; all visible in a dedicated lecture view
 - **Localization** — English and Arabic (RTL)
 - **Dark Mode** — because TAs work at night too
 - **Local-First & Private** — all data stays in a local SQLite file on your machine
@@ -57,6 +58,10 @@ Bundles land in `src-tauri/target/release/bundle/`.
 - The password is verified against an **Argon2** hash and never stored or transmitted in plaintext
 - There is **no recovery option** — losing the password means resetting the app data
 - All data is stored locally; nothing is transmitted anywhere
+
+## Backing up
+
+Your data lives in the OS app-data directory: the SQLite database (`ta-assistant.db`) plus the `materials/` folder that holds per-lecture file attachments. To back up, copy the whole app-data directory (or just `ta-assistant.db` if you don't use file attachments); restoring means replacing both together.
 
 ## Contributing
 

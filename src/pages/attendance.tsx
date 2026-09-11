@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { NotebookText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +36,7 @@ interface AttendanceRecord {
 
 export default function Attendance() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const {
     selectedSemesterYearId,
     selectedSubjectId,
@@ -285,7 +288,17 @@ export default function Attendance() {
                   </div>
                 )}
                 <button
-                  className="text-[10px] text-destructive mt-1 hover:underline"
+                  className="text-[10px] text-muted-foreground mt-1 hover:underline flex items-center gap-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/lectures/${lec.id}`);
+                  }}
+                >
+                  <NotebookText className="h-3 w-3" />
+                  {t("lecture.materials")}
+                </button>
+                <button
+                  className="text-[10px] text-destructive mt-1 hover:underline ml-2"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDeleteLecture(lec.id);

@@ -16,6 +16,7 @@ import Dashboard from "@/pages/dashboard";
 import Students from "@/pages/students";
 import Grades from "@/pages/grades";
 import Attendance from "@/pages/attendance";
+import Lecture from "@/pages/lecture";
 import Settings from "@/pages/settings";
 
 function AppContent() {
@@ -41,6 +42,7 @@ function AppContent() {
           <Route path="students" element={<Students />} />
           <Route path="grades" element={<Grades />} />
           <Route path="attendance" element={<Attendance />} />
+          <Route path="lectures/:id" element={<Lecture />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

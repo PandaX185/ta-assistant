@@ -82,7 +82,7 @@ pub fn create_lecture(
     create_lecture_impl(&conn, subject_id, semester_year_id, section_id, date, title)
 }
 
-fn create_lecture_impl(
+pub fn create_lecture_impl(
     conn: &Connection,
     subject_id: String,
     semester_year_id: String,
@@ -109,12 +109,24 @@ fn create_lecture_impl(
 #[tauri::command]
 pub fn delete_lecture(app: AppHandle, id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    delete_lecture_impl(&conn, id)
+    let root = crate::commands::materials::materials_root(&app)?;
+    delete_lecture_impl(&conn, &root, id)
 }
 
-fn delete_lecture_impl(conn: &Connection, id: String) -> Result<(), String> {
-    conn.execute("DELETE FROM lectures WHERE id = ?1", rusqlite::params![id])
+pub fn delete_lecture_impl(
+    conn: &Connection,
+    materials: &std::path::Path,
+    id: String,
+) -> Result<(), String> {
+    let deleted = conn
+        .execute("DELETE FROM lectures WHERE id = ?1", rusqlite::params![id])
         .map_err(|e| format!("Delete lecture failed: {e}"))?;
+    if deleted == 0 {
+        return Err("Lecture not found".into());
+    }
+    // Best-effort: cascade already dropped the DB rows, now remove any attached
+    // files on disk. A missing folder (no material ever attached) is fine.
+    let _ = std::fs::remove_dir_all(materials.join(&id));
     Ok(())
 }
 
@@ -310,7 +322,11 @@ mod tests {
         let lid = lectures[0].id.clone();
         seed_attendance_impl(&conn, lid.clone(), sy.clone(), sub.clone()).unwrap();
         assert_eq!(get_attendance_impl(&conn, lid.clone()).unwrap().len(), 2);
-        delete_lecture_impl(&conn, lid).unwrap();
+        let mats_root =
+            std::env::temp_dir().join(format!("ta-attendance-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&mats_root).unwrap();
+        delete_lecture_impl(&conn, &mats_root, lid).unwrap();
+        std::fs::remove_dir_all(&mats_root).unwrap();
         assert_eq!(
             get_lectures_impl(&conn, sy, sub, "sec-1".into())
                 .unwrap()

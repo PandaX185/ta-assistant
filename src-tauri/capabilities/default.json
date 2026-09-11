@@ -7,6 +7,8 @@
     "sql:default",
     "sql:allow-load",
     "sql:allow-execute",
-    "sql:allow-select"
+    "sql:allow-select",
+    "dialog:allow-open",
+    "opener:allow-open-url"
   ]
 }

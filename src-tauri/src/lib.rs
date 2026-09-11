@@ -12,7 +12,10 @@ pub fn run() {
     // file but tracked them in separate tables (_sqlx_migrations vs
     // _schema_migrations), which made the second runner fail with
     // "table preferences already exists" on fresh installs (e.g. Android).
-    let builder = tauri::Builder::default().plugin(tauri_plugin_sql::Builder::default().build());
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init());
 
     // Desktop-only: the global-shortcut plugin (global-hotkey) has no
     // Android/iOS support. Registered under #[cfg(desktop)] so mobile builds
@@ -81,6 +84,15 @@ pub fn run() {
             commands::attendance_cmd::mark_attendance,
             commands::attendance_cmd::seed_attendance,
             commands::search::global_search,
+            commands::materials::get_lecture,
+            commands::materials::get_lecture_materials,
+            commands::materials::save_note,
+            commands::materials::attach_files,
+            commands::materials::delete_file,
+            commands::materials::open_file,
+            commands::materials::add_link,
+            commands::materials::update_link,
+            commands::materials::delete_link,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

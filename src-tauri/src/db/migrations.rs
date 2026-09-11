@@ -105,6 +105,12 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/017_add_guide_seen_to_preferences.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 18,
+            description: "create lecture materials (notes, files, links)",
+            sql: include_str!("../../migrations/018_create_lecture_materials.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
