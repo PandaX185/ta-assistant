@@ -131,9 +131,31 @@ fn fetch_release_json() -> Result<String, String> {
     Ok(body)
 }
 
+/// Where downloaded release artifacts are stored.
+///
+/// On Android this must be inside a directory the android-installer plugin's
+/// FileProvider can share. `app_data_dir()` resolves to the app's raw data
+/// directory (`/data/user/0/<pkg>`), which that provider does NOT expose, so
+/// install fails with "APK path is not inside a shareable directory". The app
+/// cache dir (`dataDir/cache`) IS covered and is a fine home for a
+/// re-downloadable artifact.
+fn updates_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    #[cfg(target_os = "android")]
+    let base = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("failed to resolve app cache dir: {e}"))?;
+    #[cfg(not(target_os = "android"))]
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to resolve app data dir: {e}"))?;
+    Ok(base.join("updates"))
+}
+
 /// Download `url` (a GitHub release asset URL) into
-/// `app_data_dir()/updates/<asset_name>` and return the absolute path. Runs on
-/// a blocking worker so the webview stays responsive. Progress is reported on
+/// `updates_dir()/<asset_name>` and return the absolute path. Runs on a
+/// blocking worker so the webview stays responsive. Progress is reported on
 /// the `update-download-progress` event.
 #[tauri::command]
 pub async fn download_update(
@@ -147,11 +169,7 @@ pub async fn download_update(
 }
 
 fn download_update_impl(app: &AppHandle, url: &str, asset_name: &str) -> Result<String, String> {
-    let target = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("failed to resolve app data dir: {e}"))?
-        .join("updates");
+    let target = updates_dir(app)?;
     fs::create_dir_all(&target).map_err(|e| format!("failed to create updates dir: {e}"))?;
     let dest = target.join(sanitize_file_name(asset_name));
 
