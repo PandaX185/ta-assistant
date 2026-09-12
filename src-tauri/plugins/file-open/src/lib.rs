@@ -75,8 +75,8 @@ impl<R: Runtime> FileOpen<R> {
         {
             let res: NameResponse = self
                 .handle
-                .run_mobile_plugin("name", NameArg { uri })
-                .map_err(Into::into)?;
+                .run_mobile_plugin::<NameResponse>("name", NameArg { uri })
+                .map_err(Into::<tauri::Error>::into)?;
             Ok(if res.name.is_empty() {
                 None
             } else {

@@ -1,0 +1,2 @@
+com.pandax185.taassistant.fileopen
+xml open_file_paths
