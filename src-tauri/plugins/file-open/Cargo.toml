@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-file-open"
+version = "0.1.0"
+description = "Open local files with the system default app (Android via FileProvider + granted ACTION_VIEW)."
+edition = "2021"
+license = "MIT OR Apache-2.0"
+links = "tauri-plugin-file-open"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = "2"

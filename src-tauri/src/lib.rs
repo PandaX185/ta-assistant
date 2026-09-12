@@ -17,7 +17,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_android_installer::init());
+        .plugin(tauri_plugin_android_installer::init())
+        .plugin(tauri_plugin_file_open::init());
 
     // Desktop-only: the global-shortcut plugin (global-hotkey) has no
     // Android/iOS support. Registered under #[cfg(desktop)] so mobile builds

@@ -211,10 +211,7 @@ fn sanitize_file_name(name: &str) -> String {
 /// the `android-installer` plugin instead, so this is only ever invoked there.
 #[tauri::command]
 pub fn open_downloaded(app: AppHandle, path: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    app.opener()
-        .open_path(path, None::<&str>)
-        .map_err(|e| format!("Failed to open downloaded file: {e}"))
+    crate::commands::open_with_default(&app, std::path::Path::new(&path))
 }
 
 #[cfg(test)]

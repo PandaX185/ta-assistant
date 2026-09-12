@@ -4221,7 +4221,7 @@ dependencies = [
 
 [[package]]
 name = "ta-assistant"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "argon2",
  "percent-encoding",
@@ -4234,6 +4234,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-android-installer",
  "tauri-plugin-dialog",
+ "tauri-plugin-file-open",
  "tauri-plugin-fs",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
@@ -4462,6 +4463,15 @@ dependencies = [
  "tauri-plugin-fs",
  "thiserror 2.0.19",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-file-open"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

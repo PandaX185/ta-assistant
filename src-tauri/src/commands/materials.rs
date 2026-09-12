@@ -590,10 +590,7 @@ fn resolve_file_path(conn: &Connection, root: &Path, file_id: &str) -> Result<Pa
 pub fn open_file(app: AppHandle, file_id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
     let path = resolve_file_path(&conn, &materials_root(&app)?, &file_id)?;
-    use tauri_plugin_opener::OpenerExt;
-    app.opener()
-        .open_path(path.display().to_string(), None::<&str>)
-        .map_err(|e| format!("Failed to open file: {e}"))
+    crate::commands::open_with_default(&app, &path)
 }
 
 #[tauri::command]
