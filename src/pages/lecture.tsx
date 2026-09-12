@@ -151,9 +151,11 @@ export default function Lecture() {
     const selected = await openDialog({ multiple: true, directory: false });
     if (!selected || selected.length === 0) return;
     try {
+      // Android hands back `content://` URIs instead of paths; the backend
+      // reads those through the fs plugin and derives a display name.
       const result = await invoke<AttachResult>("attach_files", {
         lectureId: id,
-        sourcePaths: selected,
+        files: selected.map((source) => ({ source })),
       });
       setBundle((prev) => {
         if (!prev) return prev;

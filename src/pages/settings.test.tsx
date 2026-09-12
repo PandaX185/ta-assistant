@@ -2,8 +2,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  canInstall,
+  install,
+  requestInstallPermission,
+} from "tauri-plugin-android-installer-api";
 import { useFilterStore } from "@/stores/filter-store";
 import Settings from "./settings";
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+vi.mock("tauri-plugin-android-installer-api", () => ({
+  canInstall: vi.fn(),
+  install: vi.fn(),
+  requestInstallPermission: vi.fn(),
+}));
 
 const semesterYears = [
   { id: "sy-1", year: 2026, semester: "Fall" },
@@ -24,6 +38,9 @@ const sections = [
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  vi.mocked(canInstall).mockReset();
+  vi.mocked(install).mockReset();
+  vi.mocked(requestInstallPermission).mockReset();
   vi.spyOn(window, "confirm").mockReturnValue(true);
   useFilterStore.setState({
     semesterYears,
@@ -163,5 +180,115 @@ describe("Settings", () => {
     expect(
       screen.getByText("Select a semester and subject to see its sections."),
     ).toBeInTheDocument();
+  });
+
+  it("reports when the installed version is up to date", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "check_for_updates")
+        return Promise.resolve({
+          current_version: "0.3.0",
+          latest_version: "0.3.0",
+          update_available: false,
+          release_notes: null,
+          published_at: null,
+          download_url: null,
+          asset_name: null,
+          asset_size: null,
+        });
+      return Promise.resolve(undefined);
+    });
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await user.click(screen.getByRole("button", { name: "Check for updates" }));
+    expect(
+      await screen.findByText(/You're up to date/),
+    ).toBeInTheDocument();
+  });
+
+  it("offers an update and hands the installer to the OS on desktop", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "check_for_updates")
+        return Promise.resolve({
+          current_version: "0.3.0",
+          latest_version: "0.4.0",
+          update_available: true,
+          release_notes: "Fixed stuff",
+          published_at: "2026-09-01T00:00:00Z",
+          download_url: "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
+          asset_name: "app.apk",
+          asset_size: 1_000_000,
+        });
+      if (cmd === "download_update")
+        return Promise.resolve("/tmp/ta-assistant/updates/app.apk");
+      return Promise.resolve(undefined);
+    });
+    vi.mocked(canInstall).mockResolvedValue(false);
+    vi.mocked(requestInstallPermission).mockRejectedValue(
+      new Error("only supported on Android"),
+    );
+    vi.mocked(install).mockResolvedValue(undefined);
+
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await user.click(screen.getByRole("button", { name: "Check for updates" }));
+    expect(
+      await screen.findByRole("heading", { name: "Version 0.4.0 is available" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Published/)).toBeInTheDocument();
+    expect(screen.getByText(/Fixed stuff/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Download & Install" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("download_update", {
+        url: "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
+        assetName: "app.apk",
+      }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("open_downloaded", {
+        path: "/tmp/ta-assistant/updates/app.apk",
+      }),
+    );
+    expect(install).not.toHaveBeenCalled();
+  });
+
+  it("uses the Android installer plugin when available", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "check_for_updates")
+        return Promise.resolve({
+          current_version: "0.3.0",
+          latest_version: "0.4.0",
+          update_available: true,
+          release_notes: null,
+          published_at: null,
+          download_url: "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
+          asset_name: "app.apk",
+          asset_size: null,
+        });
+      if (cmd === "download_update")
+        return Promise.resolve("/data/user/0/com.pandax185.taassistant/files/updates/app.apk");
+      return Promise.resolve(undefined);
+    });
+    vi.mocked(canInstall).mockResolvedValue(true);
+    vi.mocked(install).mockResolvedValue(undefined);
+
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await user.click(screen.getByRole("button", { name: "Check for updates" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Download & Install" }),
+    );
+    await waitFor(() =>
+      expect(install).toHaveBeenCalledWith(
+        "/data/user/0/com.pandax185.taassistant/files/updates/app.apk",
+      ),
+    );
+    expect(invoke).not.toHaveBeenCalledWith(
+      "open_downloaded",
+      expect.anything(),
+    );
   });
 });

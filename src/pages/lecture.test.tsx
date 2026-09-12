@@ -162,7 +162,7 @@ describe("Lecture materials page", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("attach_files", {
         lectureId: "lec-1",
-        sourcePaths: ["/tmp/slides.pdf", "/tmp/hw.pdf"],
+        files: [{ source: "/tmp/slides.pdf" }, { source: "/tmp/hw.pdf" }],
       }),
     );
     expect(await screen.findByText("hw.pdf")).toBeInTheDocument();

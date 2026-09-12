@@ -15,7 +15,9 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_android_installer::init());
 
     // Desktop-only: the global-shortcut plugin (global-hotkey) has no
     // Android/iOS support. Registered under #[cfg(desktop)] so mobile builds
@@ -93,6 +95,9 @@ pub fn run() {
             commands::materials::add_link,
             commands::materials::update_link,
             commands::materials::delete_link,
+            commands::updates::check_for_updates,
+            commands::updates::download_update,
+            commands::updates::open_downloaded,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

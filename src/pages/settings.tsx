@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { HelpCircle } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import {
+  canInstall,
+  install,
+  requestInstallPermission,
+} from "tauri-plugin-android-installer-api";
+import { Download, HelpCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +28,37 @@ import {
 } from "@/components/ui/dialog";
 import { useFilterStore, Subject, Section } from "@/stores/filter-store";
 import { useUIStore } from "@/stores/ui-store";
+
+/* ───── Update-checking types ───── */
+
+interface UpdateStatus {
+  current_version: string;
+  latest_version: string;
+  update_available: boolean;
+  release_notes: string | null;
+  published_at: string | null;
+  download_url: string | null;
+  asset_name: string | null;
+  asset_size: number | null;
+}
+
+interface DownloadProgress {
+  bytes_downloaded: number;
+  bytes_total: number | null;
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** i;
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString();
+}
 
 /* ───── Shared bits ───── */
 
@@ -666,11 +703,88 @@ export default function Settings() {
   const [version, setVersion] = useState<string | null>(null);
   const openGuide = useUIStore((s) => s.openGuide);
 
+  // Update checking state
+  const [updateInfo, setUpdateInfo] = useState<UpdateStatus | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+
   useEffect(() => {
     getVersion()
       .then(setVersion)
       .catch(() => setVersion(null));
   }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    listen<DownloadProgress>("update-download-progress", (event) => {
+      setProgress(event.payload);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  const handleCheckForUpdates = async () => {
+    setCheckingUpdates(true);
+    setUpdateError(null);
+    setUpdateInfo(null);
+    try {
+      const status = await invoke<UpdateStatus>("check_for_updates");
+      setUpdateInfo(status);
+      if (status.update_available) setUpdateDialogOpen(true);
+    } catch (e) {
+      setUpdateError(String(e));
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  const handleDownloadAndInstall = async () => {
+    if (!updateInfo?.download_url || !updateInfo.asset_name) return;
+    setDownloading(true);
+    setUpdateError(null);
+    setProgress(null);
+    try {
+      const path = await invoke<string>("download_update", {
+        url: updateInfo.download_url,
+        assetName: updateInfo.asset_name,
+      });
+      if (await canInstall()) {
+        await install(path);
+        // The OS install prompt appears; on success the app is replaced, so
+        // nothing after this runs in that case.
+        setUpdateDialogOpen(false);
+        return;
+      }
+      try {
+        await requestInstallPermission();
+      } catch {
+        // Android 8+ isn't granted yet on Android; on desktop this always
+        // rejects, which is how we hand the installer to the OS instead.
+        await invoke("open_downloaded", { path });
+        setUpdateDialogOpen(false);
+        return;
+      }
+      if (await canInstall()) {
+        await install(path);
+        setUpdateDialogOpen(false);
+      } else {
+        setUpdateError(t("updates.permission_needed"));
+      }
+    } catch (e) {
+      setUpdateError(String(e));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -729,6 +843,98 @@ export default function Settings() {
       ) : (
         <SectionsSection />
       )}
+
+      {/* Updates */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">{t("updates.title")}</h2>
+            <p className="text-xs text-muted-foreground">
+              {t("updates.description")}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCheckForUpdates}
+            disabled={checkingUpdates || downloading}
+          >
+            <RefreshCw
+              className={`h-4 w-4 mr-1 ${checkingUpdates ? "animate-spin" : ""}`}
+            />
+            {checkingUpdates ? t("updates.checking") : t("updates.check")}
+          </Button>
+        </div>
+
+        {updateError && (
+          <p className="text-sm text-destructive">{updateError}</p>
+        )}
+
+        {updateInfo && !updateInfo.update_available && !checkingUpdates && (
+          <p className="text-sm text-muted-foreground">
+            {t("updates.up_to_date", { version: updateInfo.latest_version })}
+          </p>
+        )}
+
+        {downloading && progress && (
+          <div className="space-y-1 max-w-sm">
+            <p className="text-sm">{t("updates.downloading")}</p>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{
+                  width: progress.bytes_total
+                    ? `${Math.min(100, (progress.bytes_downloaded / progress.bytes_total) * 100)}%`
+                    : "40%",
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {formatBytes(progress.bytes_downloaded)}
+              {progress.bytes_total
+                ? ` / ${formatBytes(progress.bytes_total)}`
+                : ""}
+            </p>
+          </div>
+        )}
+      </section>
+
+      <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t("updates.available", { version: updateInfo?.latest_version })}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            {updateInfo?.published_at && (
+              <p className="text-xs text-muted-foreground">
+                {t("updates.published", {
+                  date: formatDate(updateInfo.published_at),
+                })}
+              </p>
+            )}
+            {updateInfo?.release_notes && (
+              <div className="max-h-64 overflow-y-auto rounded-md border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
+                {updateInfo.release_notes}
+              </div>
+            )}
+            {updateInfo?.asset_size ? (
+              <p className="text-xs text-muted-foreground">
+                {t("updates.size", { size: formatBytes(updateInfo.asset_size) })}
+              </p>
+            ) : null}
+            <Button
+              className="w-full"
+              onClick={handleDownloadAndInstall}
+              disabled={downloading}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {downloading ? t("updates.downloading") : t("updates.download_install")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

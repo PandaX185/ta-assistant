@@ -114,6 +114,19 @@
     "coming_soon": "Coming soon.",
     "version": "Version"
   },
+  "updates": {
+    "title": "Updates",
+    "description": "Check GitHub releases for a newer version of TA Assistant.",
+    "check": "Check for updates",
+    "checking": "Checking…",
+    "up_to_date": "You're up to date ({{version}} is the latest).",
+    "available": "Version {{version}} is available",
+    "published": "Published {{date}}",
+    "size": "Size: {{size}}",
+    "download_install": "Download & Install",
+    "downloading": "Downloading…",
+    "permission_needed": "Update cancelled — allow TA Assistant to install unknown apps, then try again."
+  },
   "guide": {
     "intro_title": "Welcome!",
     "intro_desc": "Here's a quick tour of your workspace. You can skip it and replay it anytime from Settings.",

@@ -65,6 +65,17 @@ pub struct AttachResult {
     pub errors: Vec<String>,
 }
 
+/// One item handed to `attach_files`. On desktop the dialog returns real paths,
+/// so `source` is a filesystem path. On Android it returns a `content://` URI,
+/// which is read through the fs plugin; the display name is derived from the
+/// URI's last segment (`file_name` exists only for future explicit overrides).
+#[derive(serde::Deserialize)]
+pub struct IncomingAttach {
+    pub source: String,
+    #[serde(default)]
+    pub file_name: Option<String>,
+}
+
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -288,14 +299,53 @@ fn save_note_impl(
     })
 }
 
+/// Real paths (all desktop platforms) go through the streaming copy loop.
+/// Android hands back `content://` URIs instead, which std::fs cannot touch;
+/// those are read through the fs plugin (it resolves Android content URIs).
+fn split_incoming(files: &[IncomingAttach]) -> (Vec<String>, Vec<&IncomingAttach>) {
+    let paths = files
+        .iter()
+        .filter(|f| !f.source.starts_with("content://"))
+        .map(|f| f.source.clone())
+        .collect::<Vec<_>>();
+    let content = files
+        .iter()
+        .filter(|f| f.source.starts_with("content://"))
+        .collect::<Vec<_>>();
+    (paths, content)
+}
+
 #[tauri::command]
 pub fn attach_files(
     app: AppHandle,
     lecture_id: String,
-    source_paths: Vec<String>,
+    files: Vec<IncomingAttach>,
 ) -> Result<AttachResult, String> {
     let conn = crate::db::open_db(&app)?;
-    attach_files_impl(&conn, &materials_root(&app)?, &lecture_id, &source_paths)
+    let root = materials_root(&app)?;
+
+    let mut result = AttachResult {
+        files: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    let (path_sources, content_files) = split_incoming(&files);
+    if !path_sources.is_empty() {
+        let paths_result = attach_files_impl(&conn, &root, &lecture_id, &path_sources)?;
+        result.files.extend(paths_result.files);
+        result.errors.extend(paths_result.errors);
+    }
+    for incoming in content_files {
+        match attach_content_file(&app, &conn, &root, &lecture_id, incoming) {
+            Ok(file) => result.files.push(file),
+            Err(e) => {
+                let name = incoming.file_name.as_deref().unwrap_or("attachment");
+                result.errors.push(format!("{name}: {e}"));
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 fn attach_files_impl(
@@ -330,19 +380,6 @@ fn attach_files_impl(
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("attachment");
-        let ext = Path::new(file_name)
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.to_ascii_lowercase())
-            .unwrap_or_default();
-        let stored_name = if ext.is_empty() {
-            uuid::Uuid::new_v4().to_string()
-        } else {
-            format!("{}.{}", uuid::Uuid::new_v4(), ext)
-        };
-        let relative = format!("{}/{}", lecture_id, stored_name);
-        let dest = root.join(&relative);
-
         if let Err(e) = fs::create_dir_all(&dir) {
             errors.push(format!(
                 "{}: failed to create materials folder: {e}",
@@ -350,44 +387,149 @@ fn attach_files_impl(
             ));
             continue;
         }
+        let stored_name = stored_name_for(file_name);
+        let relative = format!("{}/{}", lecture_id, stored_name);
+        let dest = root.join(&relative);
         if let Err(e) = fs::copy(sp, &dest) {
             errors.push(format!("{}: failed to copy file: {e}", sp.display()));
             continue;
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
-        let created_at = now_millis();
-        let insert = conn.execute(
-            "INSERT INTO lecture_files (id, lecture_id, file_name, stored_path, mime_type, file_size, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![
-                id,
-                lecture_id,
-                file_name,
-                relative,
-                mime_from_name(file_name),
-                meta.len() as i64,
-                created_at,
-            ],
-        );
-        match insert {
-            Ok(_) => files.push(FileInfo {
-                id,
-                lecture_id: lecture_id.to_string(),
-                file_name: file_name.to_string(),
-                stored_path: relative,
-                mime_type: mime_from_name(file_name),
-                file_size: meta.len() as i64,
-                created_at,
-            }),
+        match insert_file_row(conn, lecture_id, file_name, &relative, meta.len() as i64) {
+            Ok(file) => files.push(file),
             Err(e) => {
                 let _ = fs::remove_file(&dest);
-                errors.push(format!("{}: failed to save: {e}", sp.display()));
+                errors.push(format!("{}: {e}", sp.display()));
             }
         }
     }
 
     Ok(AttachResult { files, errors })
+}
+
+/// Attach a file picked on Android, where the dialog returns a `content://`
+/// URI instead of a filesystem path. The bytes are read through the fs plugin
+/// (which resolves Android content URIs) and stored like any other attachment.
+/// The display name is derived from the URI when possible.
+fn attach_content_file(
+    app: &AppHandle,
+    conn: &Connection,
+    root: &Path,
+    lecture_id: &str,
+    incoming: &IncomingAttach,
+) -> Result<FileInfo, String> {
+    use tauri_plugin_fs::{FilePath, FsExt};
+    let path: FilePath = incoming
+        .source
+        .parse()
+        .map_err(|_| "invalid source path".to_string())?;
+    let data = app
+        .fs()
+        .read(path)
+        .map_err(|e| format!("failed to read picked file: {e}"))?;
+    let file_name = incoming
+        .file_name
+        .clone()
+        .or_else(|| derive_content_name(&incoming.source))
+        .unwrap_or_else(|| "attachment".to_string());
+    store_attachment_bytes(conn, root, lecture_id, &file_name, &data)
+}
+
+/// Best-effort display name for an Android `content://` URI. SAF pickers
+/// usually encode the real file name in the last URI segment, percent-encoded
+/// (e.g. `.../document/primary%3ADownloads%2Flecture%20notes.pdf`). When that
+/// segment is just an opaque numeric id, we return None so a fallback name is
+/// used instead.
+fn derive_content_name(uri: &str) -> Option<String> {
+    let last = uri.rfind('/').and_then(|i| uri.get(i + 1..))?;
+    if last.is_empty() {
+        return None;
+    }
+    let decoded = percent_encoding::percent_decode_str(last).decode_utf8_lossy();
+    let name = decoded.rsplit('/').next().unwrap_or(&decoded);
+    // Strip a provider key prefix like `primary:` or `msf:`.
+    let name = name.rsplit(':').next().unwrap_or(name);
+    if name.is_empty() || name.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+/// Write a byte buffer into the lecture folder and register it in the DB.
+/// Used on mobile where the picker only exposes `content://` URIs.
+fn store_attachment_bytes(
+    conn: &Connection,
+    root: &Path,
+    lecture_id: &str,
+    file_name: &str,
+    data: &[u8],
+) -> Result<FileInfo, String> {
+    if data.is_empty() || data.len() as u64 > MAX_FILE_SIZE {
+        return Err("size outside the allowed range".to_string());
+    }
+    let dir = root.join(lecture_id);
+    fs::create_dir_all(&dir).map_err(|e| format!("failed to create materials folder: {e}"))?;
+    let stored_name = stored_name_for(file_name);
+    let relative = format!("{}/{}", lecture_id, stored_name);
+    let dest = root.join(&relative);
+    fs::write(&dest, data).map_err(|e| format!("failed to write file: {e}"))?;
+    match insert_file_row(conn, lecture_id, file_name, &relative, data.len() as i64) {
+        Ok(file) => Ok(file),
+        Err(e) => {
+            let _ = fs::remove_file(&dest);
+            Err(e)
+        }
+    }
+}
+
+/// Stored filename: UUID + original extension (so opening apps can sniff the
+/// type). Files without an extension keep the bare UUID.
+fn stored_name_for(file_name: &str) -> String {
+    let ext = Path::new(file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if ext.is_empty() {
+        uuid::Uuid::new_v4().to_string()
+    } else {
+        format!("{}.{}", uuid::Uuid::new_v4(), ext)
+    }
+}
+
+/// Shared insert for a stored attachment; returns the full `FileInfo`.
+fn insert_file_row(
+    conn: &Connection,
+    lecture_id: &str,
+    file_name: &str,
+    relative: &str,
+    size_bytes: i64,
+) -> Result<FileInfo, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let created_at = now_millis();
+    conn.execute(
+        "INSERT INTO lecture_files (id, lecture_id, file_name, stored_path, mime_type, file_size, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            id,
+            lecture_id,
+            file_name,
+            relative,
+            mime_from_name(file_name),
+            size_bytes,
+            created_at,
+        ],
+    )
+    .map_err(|e| format!("failed to save: {e}"))?;
+    Ok(FileInfo {
+        id,
+        lecture_id: lecture_id.to_string(),
+        file_name: file_name.to_string(),
+        stored_path: relative.to_string(),
+        mime_type: mime_from_name(file_name),
+        file_size: size_bytes,
+        created_at,
+    })
 }
 
 #[tauri::command]
@@ -690,6 +832,84 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&src);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn derive_content_name_extracts_names_from_saf_uris() {
+        // Real-name encodings seen from the Downloads/external-storage pickers.
+        assert_eq!(
+            derive_content_name(
+                "content://com.android.externalstorage.documents/document/primary%3ADownloads%2Flecture%20notes.pdf"
+            )
+            .as_deref(),
+            Some("lecture notes.pdf")
+        );
+        assert_eq!(
+            derive_content_name(
+                "content://com.android.providers.downloads.documents/document/msf%3A42"
+            )
+            .as_deref(),
+            None,
+            "provider ids are opaque; fall back to a generic name"
+        );
+        assert_eq!(
+            derive_content_name("content://media/external/images/media/12345").as_deref(),
+            None
+        );
+        assert_eq!(derive_content_name("not a uri"), None);
+        assert_eq!(derive_content_name("content:///"), None);
+    }
+
+    #[test]
+    fn store_attachment_bytes_persists_buffer_with_name() {
+        let conn = test_utils::test_conn();
+        let lid = seeded_lecture(&conn);
+        let root = temp_root("root");
+
+        let file =
+            store_attachment_bytes(&conn, &root, &lid, "notes.pdf", b"%PDF-1.4 data").unwrap();
+        assert_eq!(file.file_name, "notes.pdf");
+        assert_eq!(file.mime_type, "application/pdf");
+        assert_eq!(file.file_size, 13);
+        assert!(file.stored_path.starts_with(&format!("{lid}/")));
+        assert_eq!(
+            fs::read(root.join(&file.stored_path)).unwrap(),
+            b"%PDF-1.4 data"
+        );
+
+        // Empty buffers and oversized ones are rejected.
+        assert!(store_attachment_bytes(&conn, &root, &lid, "empty.bin", b"").is_err());
+        let big = vec![0u8; (MAX_FILE_SIZE + 1) as usize];
+        assert!(store_attachment_bytes(&conn, &root, &lid, "big.bin", &big).is_err());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn attach_files_splits_paths_and_content_uris() {
+        let src = temp_root("src");
+        let p = write_source(&src, "ok.txt", b"hello");
+        let incoming = [
+            IncomingAttach {
+                source: p,
+                file_name: None,
+            },
+            IncomingAttach {
+                source: "content://com.android.providers.downloads/doc/7".to_string(),
+                file_name: Some("desktop-cannot-read.cn".to_string()),
+            },
+        ];
+
+        let (paths, content) = split_incoming(&incoming);
+        assert_eq!(
+            paths,
+            vec![src.join("ok.txt").to_string_lossy().to_string()]
+        );
+        assert_eq!(content.len(), 1);
+        assert_eq!(
+            content[0].file_name.as_deref(),
+            Some("desktop-cannot-read.cn")
+        );
+        let _ = fs::remove_dir_all(&src);
     }
 
     #[test]

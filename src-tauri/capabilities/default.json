@@ -9,6 +9,13 @@
     "sql:allow-execute",
     "sql:allow-select",
     "dialog:allow-open",
-    "opener:allow-open-url"
+    "opener:allow-open-url",
+    "android-installer:default",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "content://**" }
+      ]
+    }
   ]
 }

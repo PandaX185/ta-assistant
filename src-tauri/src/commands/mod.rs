@@ -6,6 +6,7 @@ pub mod preferences;
 pub mod search;
 pub mod sections;
 pub mod students;
+pub mod updates;
 
 #[cfg(test)]
 pub mod test_utils;
