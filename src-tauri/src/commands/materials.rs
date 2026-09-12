@@ -410,7 +410,8 @@ fn attach_files_impl(
 /// Attach a file picked on Android, where the dialog returns a `content://`
 /// URI instead of a filesystem path. The bytes are read through the fs plugin
 /// (which resolves Android content URIs) and stored like any other attachment.
-/// The display name is derived from the URI when possible.
+/// The real display name comes from the content provider when available
+/// (SAF URIs usually end in opaque ids, so the URI itself cannot be trusted).
 fn attach_content_file(
     app: &AppHandle,
     conn: &Connection,
@@ -430,9 +431,26 @@ fn attach_content_file(
     let file_name = incoming
         .file_name
         .clone()
+        .or_else(|| resolve_content_name(app, &incoming.source))
         .or_else(|| derive_content_name(&incoming.source))
         .unwrap_or_else(|| "attachment".to_string());
     store_attachment_bytes(conn, root, lecture_id, &file_name, &data)
+}
+
+/// Ask the native plugin to resolve a `content://` URI's display name from its
+/// content provider (`OpenableColumns.DISPLAY_NAME`). Outside Android this
+/// never happens (the desktop dialog returns real paths instead).
+fn resolve_content_name(app: &AppHandle, source: &str) -> Option<String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_file_open::FileOpenExt;
+        app.file_open().file_name(source.to_string()).ok().flatten()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, source);
+        None
+    }
 }
 
 /// Best-effort display name for an Android `content://` URI. SAF pickers

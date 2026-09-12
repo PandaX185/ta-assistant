@@ -10,7 +10,7 @@
 // covering the application data directory plus an ACTION_VIEW intent carrying
 // the correct MIME type and the URI read grant.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{plugin::TauriPlugin, Manager, Runtime};
 
 #[cfg(target_os = "android")]
@@ -24,6 +24,18 @@ const PLUGIN_IDENTIFIER: &str = "com.pandax185.taassistant.fileopen";
 struct OpenArg {
     path: String,
     mime: &'static str,
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[derive(Serialize)]
+struct NameArg {
+    uri: String,
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[derive(Deserialize)]
+struct NameResponse {
+    name: String,
 }
 
 /// Access to the file-open native APIs (Android only).
@@ -50,6 +62,31 @@ impl<R: Runtime> FileOpen<R> {
         {
             let _ = (path, mime);
             Ok(())
+        }
+    }
+
+    /// Resolve the display name of a picked `content://` URI by asking the
+    /// backing content provider for `OpenableColumns.DISPLAY_NAME`.
+    ///
+    /// Returns `Ok(None)` when the provider has no name (or outside Android);
+    /// callers should fall back to their own name derivation.
+    pub fn file_name(&self, uri: String) -> tauri::Result<Option<String>> {
+        #[cfg(target_os = "android")]
+        {
+            let res: NameResponse = self
+                .handle
+                .run_mobile_plugin("name", NameArg { uri })
+                .map_err(Into::into)?;
+            Ok(if res.name.is_empty() {
+                None
+            } else {
+                Some(res.name)
+            })
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = uri;
+            Ok(None)
         }
     }
 }

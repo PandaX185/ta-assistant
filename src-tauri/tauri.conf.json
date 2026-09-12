@@ -1,6 +1,6 @@
 {
   "productName": "TA Assistant",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "identifier": "com.pandax185.ta-assistant",
   "build": {
     "frontendDist": "../dist",

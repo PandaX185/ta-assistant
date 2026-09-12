@@ -4,11 +4,13 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
 
@@ -16,6 +18,11 @@ import java.io.File
 class OpenFileArgs {
   var path: String? = null
   var mime: String? = null
+}
+
+@InvokeArg
+class NameArgs {
+  var uri: String? = null
 }
 
 /**
@@ -26,6 +33,34 @@ class OpenFileArgs {
  */
 @TauriPlugin
 class OpenFilePlugin(private val activity: Activity) : Plugin(activity) {
+
+  @Command
+  fun name(invoke: Invoke) {
+    val raw = invoke.parseArgs(NameArgs::class.java).uri
+    val ret = JSObject()
+    if (raw.isNullOrBlank()) {
+      ret.put("name", "")
+      invoke.resolve(ret)
+      return
+    }
+    val display = queryDisplayName(Uri.parse(raw))
+    ret.put("name", display.orEmpty())
+    invoke.resolve(ret)
+  }
+
+  /** Resolve a picked `content://` URI's display name via the content provider. */
+  private fun queryDisplayName(uri: Uri): String? {
+    if (uri.scheme != "content") return null
+    return try {
+      activity.contentResolver
+        .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { cursor ->
+          if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
+        }
+    } catch (e: Exception) {
+      null
+    }
+  }
 
   @Command
   fun open(invoke: Invoke) {
