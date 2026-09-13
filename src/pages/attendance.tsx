@@ -138,8 +138,7 @@ export default function Attendance() {
   };
 
   const handleDeleteLecture = async (id: string) => {
-    if (!window.confirm("Delete this lecture and all its attendance records?"))
-      return;
+    if (!window.confirm(t("attendance.delete_lecture_confirm"))) return;
     try {
       await invoke("delete_lecture", { id });
       if (selectedLecture?.id === id) {
@@ -226,15 +225,15 @@ export default function Attendance() {
           }}
         >
           <DialogTrigger asChild>
-            <Button size="sm">+ New Lecture</Button>
+            <Button size="sm">{t("attendance.new_lecture")}</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>New Lecture</DialogTitle>
+              <DialogTitle>{t("attendance.new_lecture_title")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label htmlFor="lec-date">Date</Label>
+                <Label htmlFor="lec-date">{t("common.date")}</Label>
                 <Input
                   id="lec-date"
                   type="date"
@@ -244,17 +243,17 @@ export default function Attendance() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lec-desc">
-                  Topic (optional)
+                  {t("attendance.topic_optional")}
                 </Label>
                 <Input
                   id="lec-desc"
-                  placeholder="e.g. Chapter 3: Linked Lists"
+                  placeholder={t("attendance.topic_placeholder")}
                   value={createDesc}
                   onChange={(e) => setCreateDesc(e.target.value)}
                 />
               </div>
               <Button onClick={handleCreate} className="w-full">
-                Create
+                {t("common.create")}
               </Button>
             </div>
           </DialogContent>
@@ -265,12 +264,12 @@ export default function Attendance() {
         {/* Lectures list */}
         <div className="md:col-span-1 border rounded-lg overflow-hidden">
           <div className="bg-muted/50 px-3 py-2 text-sm font-medium border-b">
-            Lectures ({lectures.length})
+            {t("attendance.lectures_count", { count: lectures.length })}
           </div>
           <div className="divide-y max-h-[60vh] overflow-y-auto">
             {lectures.length === 0 && (
               <p className="text-xs text-muted-foreground p-4 text-center">
-                No lectures yet.
+                {t("attendance.no_lectures")}
               </p>
             )}
             {lectures.map((lec) => (
@@ -304,7 +303,7 @@ export default function Attendance() {
                     handleDeleteLecture(lec.id);
                   }}
                 >
-                  delete
+                  {t("attendance.delete_lecture")}
                 </button>
               </div>
             ))}
@@ -316,22 +315,22 @@ export default function Attendance() {
           <div className="bg-muted/50 px-3 py-2 text-sm font-medium border-b">
             <span>
               {selectedLecture
-                ? `${selectedLecture.date} — Students`
-                : "Select a lecture"}
+                ? `${selectedLecture.date} ${t("attendance.students_suffix")}`
+                : t("attendance.select_a_lecture")}
             </span>
           </div>
 
           {!selectedLecture ? (
             <p className="text-xs text-muted-foreground p-6 text-center">
-              Select a lecture from the left.
+              {t("attendance.select_from_left")}
             </p>
           ) : loading ? (
             <p className="text-xs text-muted-foreground p-6 text-center animate-pulse">
-              Loading...
+              {t("common.loading")}
             </p>
           ) : attendance.length === 0 ? (
             <p className="text-xs text-muted-foreground p-6 text-center animate-pulse">
-              Loading roster...
+              {t("attendance.loading_roster")}
             </p>
           ) : (
             <div className="divide-y">

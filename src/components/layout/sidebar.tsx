@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { MarkbookMark } from "./brand";
 import { navItems } from "./nav-items";
 
 export default function Sidebar() {
@@ -8,9 +9,9 @@ export default function Sidebar() {
 
   return (
     <aside className="hidden md:flex w-16 border-r bg-card flex-col items-center py-4 gap-2 shrink-0">
-      <div className="text-base font-bold mb-4 tracking-tight" title="TA Assistant">
-        TA
-      </div>
+      <MarkbookMark
+        className="w-8 h-8 mb-4 tracking-tight"
+      />
       {navItems.map((item) => (
         <NavLink
           key={item.to}

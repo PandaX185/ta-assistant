@@ -21,4 +21,17 @@ export function applyLocale(locale: string) {
   i18n.changeLanguage(locale);
 }
 
+/** Localize the stored season codes (Fall/Spring/Summer) for display. */
+export function localizeSeason(season: string): string {
+  const key =
+    season === "Fall"
+      ? "settings.season_fall"
+      : season === "Spring"
+        ? "settings.season_spring"
+        : season === "Summer"
+          ? "settings.season_summer"
+          : null;
+  return key ? i18n.t(key) : season;
+}
+
 export default i18n;

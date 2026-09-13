@@ -43,7 +43,7 @@ jobs:
           else
             echo "Creating release $TAG…"
             gh release create "$TAG" \
-              --title "TA Assistant $TAG" \
+              --title "Markbook $TAG" \
               --target "$GITHUB_SHA" \
               --generate-notes
             ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)

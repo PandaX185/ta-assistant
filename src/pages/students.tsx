@@ -228,9 +228,9 @@ export default function Students() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <Users className="w-12 h-12 mb-4 text-muted-foreground" />
-        <h2 className="text-xl font-semibold mb-2">Select a Section</h2>
+        <h2 className="text-xl font-semibold mb-2">{t("students.select_section")}</h2>
         <p className="text-muted-foreground max-w-md">
-          Choose a semester/year, subject, and section from the filter bar to view enrolled students.
+          {t("students.select_section_desc")}
         </p>
       </div>
     );
@@ -370,7 +370,7 @@ export default function Students() {
 
       {/* Search */}
       <Input
-        placeholder="Search by name or ID..."
+        placeholder={t("students.search_placeholder")}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full sm:max-w-xs"
@@ -378,8 +378,8 @@ export default function Students() {
 
       {/* Stats */}
       <p className="text-sm text-muted-foreground">
-        {enrollments.length} student{enrollments.length !== 1 ? "s" : ""} enrolled
-        {search && <> · {filtered.length} match{filtered.length !== 1 ? "es" : ""}</>}
+        {t("students.enrolled", { count: enrollments.length })}
+        {search && <> · {t("students.match", { count: filtered.length })}</>}
       </p>
 
       {/* Student table */}
@@ -388,8 +388,8 @@ export default function Students() {
           <ClipboardList className="w-10 h-10 mb-3 text-muted-foreground mx-auto" />
           <p className="text-muted-foreground">
             {search
-              ? "No students match your search."
-              : "No students enrolled yet. Add your first student above."}
+              ? t("students.no_students_match")
+              : t("students.no_students_yet")}
           </p>
         </div>
       ) : (
@@ -398,9 +398,9 @@ export default function Students() {
             <table className="w-full text-sm min-w-[420px]">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left px-4 py-2 font-medium">Name</th>
-                  <th className="text-left px-4 py-2 font-medium">ID</th>
-                  <th className="text-right px-4 py-2 font-medium w-20">Actions</th>
+                  <th className="text-left px-4 py-2 font-medium">{t("common.name")}</th>
+                  <th className="text-left px-4 py-2 font-medium">{t("students.id")}</th>
+                  <th className="text-right px-4 py-2 font-medium w-20">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -424,7 +424,7 @@ export default function Students() {
                           openEdit(enr);
                         }}
                       >
-                        Edit
+                        {t("common.edit")}
                       </Button>
                     </td>
                   </tr>
@@ -459,19 +459,19 @@ export default function Students() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Student?</AlertDialogTitle>
+            <AlertDialogTitle>{t("students.delete_student")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>{deleteTarget?.name}</strong> and all
-              their grades, attendance records, and bonuses. This cannot be undone.
+              {t("students.delete_student_desc_1")} <strong>{deleteTarget?.name}</strong>{" "}
+              {t("students.delete_student_desc_2")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteConfirm}
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

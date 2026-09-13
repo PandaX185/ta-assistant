@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import Database from "@tauri-apps/plugin-sql";
 import { applyLocale } from "@/i18n";
 import { useLocaleStore } from "@/stores/locale-store";
@@ -66,6 +67,7 @@ function AppContent() {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [checking, setChecking] = useState(true);
   const [hasPrefs, setHasPrefs] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
@@ -99,7 +101,7 @@ export default function App() {
   if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-muted-foreground animate-pulse">Loading...</p>
+        <p className="text-muted-foreground animate-pulse">{t("common.loading")}</p>
       </div>
     );
   }

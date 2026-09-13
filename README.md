@@ -1,4 +1,4 @@
-# TA Assistant
+# Markbook
 
 A local-first desktop app for university teaching assistants. Track students, grades, and attendance — fully offline, no cloud, no account.
 

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFilterStore } from "@/stores/filter-store";
+import { localizeSeason } from "@/i18n";
 
 interface DashboardStats {
   enrolled_students: number;
@@ -94,7 +95,7 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground">
           {selectedSubject?.name}
           {selectedSection && ` · ${selectedSection.name}`}
-          {selectedSemester && ` · ${selectedSemester.semester} ${selectedSemester.year}`}
+          {selectedSemester && ` · ${localizeSeason(selectedSemester.semester)} ${selectedSemester.year}`}
         </p>
       </div>
 
@@ -102,7 +103,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Students
+              {t("dashboard.stat_students")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -115,7 +116,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Quizzes
+              {t("dashboard.stat_quizzes")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -126,7 +127,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Assignments
+              {t("dashboard.stat_assignments")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -139,7 +140,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Lectures
+              {t("dashboard.stat_lectures")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -154,8 +155,7 @@ export default function Dashboard() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
-              No students enrolled yet. Go to{" "}
-              <span className="font-medium">Students</span> to enroll them.
+              {t("dashboard.no_students_go_to", { tab: t("sidebar.students") })}
             </p>
           </CardContent>
         </Card>
@@ -164,15 +164,15 @@ export default function Dashboard() {
       {stats && stats.enrolled_students > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Getting Started</CardTitle>
+            <CardTitle className="text-sm">{t("dashboard.getting_started")}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground space-y-2">
-            <p>{stats.enrolled_students} students enrolled</p>
+            <p>{t("dashboard.students_enrolled", { count: stats.enrolled_students })}</p>
             {stats.quiz_count === 0 && stats.assignment_count === 0 && (
-              <p>→ Go to <span className="font-medium">Grades</span> to create quizzes and assignments</p>
+              <p>{t("dashboard.grades_hint", { tab: t("sidebar.grades") })}</p>
             )}
             {stats.lecture_count === 0 && (
-              <p>→ Go to <span className="font-medium">Attendance</span> to create lectures</p>
+              <p>{t("dashboard.lectures_hint", { tab: t("sidebar.attendance") })}</p>
             )}
           </CardContent>
         </Card>

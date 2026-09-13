@@ -1,6 +1,37 @@
 {
+  "brand": {
+    "name": "Markbook"
+  },
+  "common": {
+    "loading": "Loading…",
+    "add": "+ Add",
+    "cancel": "Cancel",
+    "close": "Close",
+    "create": "Create",
+    "update": "Update",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "name": "Name",
+    "code": "Code",
+    "year": "Year",
+    "semester": "Semester",
+    "subject": "Subject",
+    "section": "Section",
+    "actions": "Actions",
+    "date": "Date",
+    "color_optional": "Color (optional)",
+    "code_optional": "Code (optional)",
+    "no_subjects_yet": "No subjects yet",
+    "no_sections_yet": "No sections yet",
+    "no_semesters_yet": "No semesters yet — create one in Settings",
+    "select_semester": "Select semester",
+    "select_subject": "Select subject",
+    "semester_colon": "Semester:",
+    "subject_colon": "Subject:"
+  },
   "onboarding": {
-    "welcome": "Welcome to TA Assistant",
+    "welcome": "Welcome to Markbook",
     "choose_language": "Choose your preferred language",
     "english": "English",
     "arabic": "العربية",
@@ -31,12 +62,14 @@
     "get_started": "Get Started"
   },
   "lock": {
-    "title": "TA Assistant",
+    "title": "Markbook",
     "description": "Enter your password to unlock the app",
     "password_placeholder": "Password",
     "unlock": "Unlock",
     "unlocking": "Unlocking...",
-    "wrong_password": "Incorrect password. Try again."
+    "wrong_password": "Incorrect password. Try again.",
+    "show_password": "Show password",
+    "hide_password": "Hide password"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -46,12 +79,21 @@
     "settings": "Settings"
   },
   "topbar": {
-    "app_title": "TA Assistant",
+    "app_title": "Markbook",
     "search_hint": "Search (Ctrl+Shift+P)"
   },
   "dashboard": {
     "title": "Dashboard",
-    "description": "Select a year and semester from the top bar to get started."
+    "description": "Select a year and semester from the top bar to get started.",
+    "stat_students": "Students",
+    "stat_quizzes": "Quizzes",
+    "stat_assignments": "Assignments",
+    "stat_lectures": "Lectures",
+    "getting_started": "Getting Started",
+    "no_students_go_to": "No students enrolled yet. Go to {{tab}} to enroll them.",
+    "students_enrolled": "{{count}} students enrolled",
+    "grades_hint": "Go to {{tab}} to create quizzes and assignments.",
+    "lectures_hint": "Go to {{tab}} to create lectures."
   },
   "students": {
     "title": "Students",
@@ -72,15 +114,55 @@
     "use_existing": "Use existing",
     "create_new_anyway": "Create new anyway",
     "create": "Create",
-    "update": "Update"
+    "update": "Update",
+    "select_section": "Select a Section",
+    "select_section_desc": "Choose a semester/year, subject, and section from the filter bar to view enrolled students.",
+    "search_placeholder": "Search by name or ID...",
+    "id": "ID",
+    "enrolled_one": "{{count}} student enrolled",
+    "enrolled_other": "{{count}} students enrolled",
+    "match_one": "{{count}} match",
+    "match_other": "{{count}} matches",
+    "no_students_match": "No students match your search.",
+    "no_students_yet": "No students enrolled yet. Add your first student above.",
+    "delete_student": "Delete Student?",
+    "delete_student_desc_1": "This will permanently delete",
+    "delete_student_desc_2": "and all their grades, attendance records, and bonuses. This cannot be undone."
   },
   "grades": {
     "title": "Grades",
-    "no_filter": "No filter selected."
+    "no_filter": "No filter selected.",
+    "no_students_yet": "No students enrolled yet. Go to the Students tab to enroll them first.",
+    "enrolled": "{{count}} enrolled",
+    "new_item": "+ New Graded Item",
+    "new_item_title": "New Graded Item",
+    "type": "Type",
+    "quiz": "Quiz",
+    "assignment": "Assignment",
+    "max_score": "Max Score",
+    "name_placeholder": "e.g. Quiz 1",
+    "create_for_all": "Create for all students",
+    "no_graded_items": "No graded items yet. Click “{{newItem}}” above.",
+    "delete_item": "delete this item",
+    "delete_column_confirm": "Delete \"{{name}}\" for all students?",
+    "student_col": "Student",
+    "score_col": "Score"
   },
   "attendance": {
     "title": "Attendance",
-    "no_filter": "No filter selected."
+    "no_filter": "No filter selected.",
+    "new_lecture": "+ New Lecture",
+    "new_lecture_title": "New Lecture",
+    "topic_optional": "Topic (optional)",
+    "topic_placeholder": "e.g. Chapter 3: Linked Lists",
+    "lectures_count": "Lectures ({{count}})",
+    "no_lectures": "No lectures yet.",
+    "delete_lecture": "delete",
+    "students_suffix": "— Students",
+    "select_a_lecture": "Select a lecture",
+    "select_from_left": "Select a lecture from the left.",
+    "loading_roster": "Loading roster…",
+    "delete_lecture_confirm": "Delete this lecture and all its attendance records?"
   },
   "lecture": {
     "back_to_attendance": "Back to Attendance",
@@ -112,11 +194,39 @@
   "settings": {
     "title": "Settings",
     "coming_soon": "Coming soon.",
-    "version": "Version"
+    "version": "Version",
+    "tab_semesters": "Semester / Year",
+    "tab_subjects": "Subjects",
+    "tab_sections": "Sections",
+    "semester_year": "Semester / Year",
+    "new_semester_year": "New Semester / Year",
+    "season_fall": "Fall",
+    "season_spring": "Spring",
+    "season_summer": "Summer",
+    "semester_delete_confirm": "Deleting this semester removes its subjects, sections, enrollments, grades, attendance and lectures. Continue?",
+    "no_semester_years": "No semester/years yet. Add one to get started.",
+    "heading_subjects": "Subjects",
+    "new_subject": "New Subject",
+    "edit_subject": "Edit Subject",
+    "subject_name_placeholder": "e.g. Data Structures",
+    "subject_code_placeholder": "e.g. CS201",
+    "subject_delete_confirm": "Deleting this subject removes its sections, enrollments, grades, attendance and lectures for this semester. Continue?",
+    "no_subjects_for_semester": "No subjects yet for this semester.",
+    "select_semester_to_manage": "Select a semester to manage its subjects.",
+    "heading_sections": "Sections",
+    "new_section": "New Section",
+    "rename_section": "Rename Section",
+    "section_name_placeholder": "e.g. Group B",
+    "section_delete_confirm": "Deleting this section removes its enrollments, lectures, attendance and grades. Continue?",
+    "no_subjects_in_semester": "No subjects in this semester",
+    "select_semester_first": "Select a semester first",
+    "select_sem_and_sub": "Select a semester and subject to see its sections.",
+    "no_sections_for": "No sections yet for {{subject}}.",
+    "this_subject": "this subject"
   },
   "updates": {
     "title": "Updates",
-    "description": "Check GitHub releases for a newer version of TA Assistant.",
+    "description": "Check GitHub releases for a newer version of Markbook.",
     "check": "Check for updates",
     "checking": "Checking…",
     "up_to_date": "You're up to date ({{version}} is the latest).",
@@ -125,7 +235,7 @@
     "size": "Size: {{size}}",
     "download_install": "Download & Install",
     "downloading": "Downloading…",
-    "permission_needed": "Update cancelled — allow TA Assistant to install unknown apps, then try again."
+    "permission_needed": "Update cancelled — allow Markbook to install unknown apps, then try again."
   },
   "guide": {
     "intro_title": "Welcome!",
@@ -140,5 +250,35 @@
     "next": "Next",
     "finish": "Finish",
     "show_again": "Show guide again"
+  },
+  "search": {
+    "placeholder": "Search students...",
+    "searching": "Searching…",
+    "no_results": "No results for \"{{query}}\"",
+    "type_to_search": "Type to search students across all subjects",
+    "navigate": "Navigate",
+    "select": "Select",
+    "close": "Close"
+  },
+  "studentDetail": {
+    "quizzes": "Quizzes",
+    "assignments": "Assignments",
+    "attendance": "Attendance",
+    "bonuses": "Bonuses & Deductions",
+    "score": "Score",
+    "total": "Total",
+    "topic": "Topic",
+    "status": "Status",
+    "present_count": "{{count}}/{{total}} present",
+    "reason": "Reason",
+    "value": "Value",
+    "total_bonus": "Total Bonus",
+    "no_records": "No grades, attendance, or bonuses recorded yet.",
+    "grand_quizzes": "Quizzes: {{value}}",
+    "grand_assignments": "Assignments: {{value}}",
+    "grand_bonus": "Bonus: {{value}}",
+    "delete_confirm": "Delete Student?",
+    "delete_confirm_desc_1": "This will permanently delete",
+    "delete_confirm_desc_2": "and all their records. This cannot be undone."
   }
 }

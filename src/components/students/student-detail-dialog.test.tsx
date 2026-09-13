@@ -134,7 +134,7 @@ describe("StudentDetailDialog", () => {
       />,
     );
 
-    expect(screen.getAllByText("Loading...").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Loading…").length).toBeGreaterThan(0);
     resolve(detail);
   });
 

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { useFilterStore, Subject, Section } from "@/stores/filter-store";
 import { useUIStore } from "@/stores/ui-store";
+import { localizeSeason } from "@/i18n";
 
 /* ───── Update-checking types ───── */
 
@@ -69,6 +70,7 @@ function SemesterPicker({
   value: string | null;
   onChange: (id: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const { semesterYears } = useFilterStore();
   return (
     <Select
@@ -76,17 +78,17 @@ function SemesterPicker({
       onValueChange={(v) => onChange(v || null)}
     >
       <SelectTrigger className="w-full sm:w-[220px] h-9 text-sm">
-        <SelectValue placeholder="Select semester" />
+        <SelectValue placeholder={t("common.select_semester")} />
       </SelectTrigger>
       <SelectContent>
         {semesterYears.length === 0 && (
           <SelectItem value="__placeholder" disabled>
-            No semesters yet — add one first
+            {t("common.no_semesters_yet")}
           </SelectItem>
         )}
         {semesterYears.map((sy) => (
           <SelectItem key={sy.id} value={sy.id}>
-            {sy.year} {sy.semester}
+            {sy.year} {localizeSeason(sy.semester)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -108,6 +110,7 @@ function useDefaultSemester(semesterId: string | null, setSemesterId: (id: strin
 /* ───── Semester/Year Section ───── */
 
 function SemesterYearSection() {
+  const { t } = useTranslation();
   const { semesterYears, loadData } = useFilterStore();
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState("");
@@ -127,9 +130,7 @@ function SemesterYearSection() {
 
   const handleDelete = async (id: string) => {
     if (
-      !window.confirm(
-        "Deleting this semester removes its subjects, sections, enrollments, grades, attendance and lectures. Continue?",
-      )
+      !window.confirm(t("settings.semester_delete_confirm"))
     )
       return;
     await invoke("delete_semester_year", { id });
@@ -139,18 +140,18 @@ function SemesterYearSection() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Semester / Year</h2>
+        <h2 className="text-lg font-semibold">{t("settings.semester_year")}</h2>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">+ Add</Button>
+            <Button size="sm">{t("common.add")}</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>New Semester / Year</DialogTitle>
+              <DialogTitle>{t("settings.new_semester_year")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label htmlFor="sy-year">Year</Label>
+                <Label htmlFor="sy-year">{t("common.year")}</Label>
                 <Input
                   id="sy-year"
                   type="number"
@@ -160,20 +161,20 @@ function SemesterYearSection() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sy-semester">Semester</Label>
+                <Label htmlFor="sy-semester">{t("common.semester")}</Label>
                 <Select value={semester} onValueChange={setSemester}>
                   <SelectTrigger id="sy-semester">
-                    <SelectValue placeholder="Select semester" />
+                    <SelectValue placeholder={t("common.select_semester")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Fall">Fall</SelectItem>
-                    <SelectItem value="Spring">Spring</SelectItem>
-                    <SelectItem value="Summer">Summer</SelectItem>
+                    <SelectItem value="Fall">{t("settings.season_fall")}</SelectItem>
+                    <SelectItem value="Spring">{t("settings.season_spring")}</SelectItem>
+                    <SelectItem value="Summer">{t("settings.season_summer")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <Button onClick={handleCreate} className="w-full">
-                Create
+                {t("common.create")}
               </Button>
             </div>
           </DialogContent>
@@ -182,7 +183,7 @@ function SemesterYearSection() {
 
       {semesterYears.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No semester/years yet. Add one to get started.
+          {t("settings.no_semester_years")}
         </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -190,9 +191,9 @@ function SemesterYearSection() {
           <table className="w-full text-sm min-w-[320px]">
             <thead className="bg-muted/50">
               <tr>
-                <th className="text-left px-4 py-2 font-medium">Year</th>
-                <th className="text-left px-4 py-2 font-medium">Semester</th>
-                <th className="text-right px-4 py-2 font-medium">Actions</th>
+                <th className="text-left px-4 py-2 font-medium">{t("common.year")}</th>
+                <th className="text-left px-4 py-2 font-medium">{t("common.semester")}</th>
+                <th className="text-right px-4 py-2 font-medium">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -201,7 +202,7 @@ function SemesterYearSection() {
                   <td className="px-4 py-2">{sy.year}</td>
                   <td className="px-4 py-2">
                     <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">
-                      {sy.semester}
+                      {localizeSeason(sy.semester)}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">
@@ -211,7 +212,7 @@ function SemesterYearSection() {
                       className="text-destructive hover:text-destructive"
                       onClick={() => handleDelete(sy.id)}
                     >
-                      Delete
+                      {t("common.delete")}
                     </Button>
                   </td>
                 </tr>
@@ -228,6 +229,7 @@ function SemesterYearSection() {
 /* ───── Subject Section (semester-scoped) ───── */
 
 function SubjectSection() {
+  const { t } = useTranslation();
   const { loadSubjects } = useFilterStore();
   const [semesterId, setSemesterId] = useState<string | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -299,9 +301,7 @@ function SubjectSection() {
 
   const handleDelete = async (id: string) => {
     if (
-      !window.confirm(
-        "Deleting this subject removes its sections, enrollments, grades, attendance and lectures for this semester. Continue?",
-      )
+      !window.confirm(t("settings.subject_delete_confirm"))
     )
       return;
     await invoke("delete_subject", { id });
@@ -311,7 +311,7 @@ function SubjectSection() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Subjects</h2>
+        <h2 className="text-lg font-semibold">{t("settings.heading_subjects")}</h2>
         <Dialog
           open={open}
           onOpenChange={(v) => {
@@ -320,33 +320,33 @@ function SubjectSection() {
           }}
         >
           <DialogTrigger asChild>
-            <Button size="sm">+ Add</Button>
+            <Button size="sm">{t("common.add")}</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingId ? "Edit Subject" : "New Subject"}</DialogTitle>
+              <DialogTitle>{editingId ? t("settings.edit_subject") : t("settings.new_subject")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label htmlFor="sub-name">Name</Label>
+                <Label htmlFor="sub-name">{t("common.name")}</Label>
                 <Input
                   id="sub-name"
-                  placeholder="e.g. Data Structures"
+                  placeholder={t("settings.subject_name_placeholder")}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sub-code">Code (optional)</Label>
+                <Label htmlFor="sub-code">{t("common.code_optional")}</Label>
                 <Input
                   id="sub-code"
-                  placeholder="e.g. CS201"
+                  placeholder={t("settings.subject_code_placeholder")}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sub-color">Color (optional)</Label>
+                <Label htmlFor="sub-color">{t("common.color_optional")}</Label>
                 <Input
                   id="sub-color"
                   type="color"
@@ -356,7 +356,7 @@ function SubjectSection() {
                 />
               </div>
               <Button onClick={handleSave} className="w-full">
-                {editingId ? "Update" : "Create"}
+                {editingId ? t("common.update") : t("common.create")}
               </Button>
             </div>
           </DialogContent>
@@ -364,15 +364,15 @@ function SubjectSection() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Semester:</span>
+        <span className="text-sm text-muted-foreground">{t("common.semester_colon")}</span>
         <SemesterPicker value={semesterId} onChange={setSemesterId} />
       </div>
 
       {subjects.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {semesterId
-            ? "No subjects yet for this semester."
-            : "Select a semester to manage its subjects."}
+            ? t("settings.no_subjects_for_semester")
+            : t("settings.select_semester_to_manage")}
         </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -380,9 +380,9 @@ function SubjectSection() {
           <table className="w-full text-sm min-w-[360px]">
             <thead className="bg-muted/50">
               <tr>
-                <th className="text-left px-4 py-2 font-medium">Name</th>
-                <th className="text-left px-4 py-2 font-medium">Code</th>
-                <th className="text-right px-4 py-2 font-medium">Actions</th>
+                <th className="text-left px-4 py-2 font-medium">{t("common.name")}</th>
+                <th className="text-left px-4 py-2 font-medium">{t("common.code")}</th>
+                <th className="text-right px-4 py-2 font-medium">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -408,7 +408,7 @@ function SubjectSection() {
                       size="sm"
                       onClick={() => openEdit(sub)}
                     >
-                      Edit
+                      {t("common.edit")}
                     </Button>
                     <Button
                       variant="ghost"
@@ -416,7 +416,7 @@ function SubjectSection() {
                       className="text-destructive hover:text-destructive"
                       onClick={() => handleDelete(sub.id)}
                     >
-                      Delete
+                      {t("common.delete")}
                     </Button>
                   </td>
                 </tr>
@@ -433,6 +433,7 @@ function SubjectSection() {
 /* ───── Sections Section ───── */
 
 function SectionsSection() {
+  const { t } = useTranslation();
   const { loadSections } = useFilterStore();
   const [semesterId, setSemesterId] = useState<string | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -512,9 +513,7 @@ function SectionsSection() {
 
   const handleDelete = async (id: string) => {
     if (
-      !window.confirm(
-        "Deleting this section removes its enrollments, lectures, attendance and grades. Continue?",
-      )
+      !window.confirm(t("settings.section_delete_confirm"))
     )
       return;
     await invoke("delete_section", { id });
@@ -526,7 +525,7 @@ function SectionsSection() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Sections</h2>
+        <h2 className="text-lg font-semibold">{t("settings.heading_sections")}</h2>
         <Dialog
           open={open}
           onOpenChange={(v) => {
@@ -539,25 +538,25 @@ function SectionsSection() {
         >
           <DialogTrigger asChild>
             <Button size="sm" disabled={!semesterId || !subjectId}>
-              + Add
+              {t("common.add")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>New Section</DialogTitle>
+              <DialogTitle>{t("settings.new_section")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label htmlFor="sec-name">Name</Label>
+                <Label htmlFor="sec-name">{t("common.name")}</Label>
                 <Input
                   id="sec-name"
-                  placeholder="e.g. Group B"
+                  placeholder={t("settings.section_name_placeholder")}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sec-color">Color (optional)</Label>
+                <Label htmlFor="sec-color">{t("common.color_optional")}</Label>
                 <Input
                   id="sec-color"
                   type="color"
@@ -567,7 +566,7 @@ function SectionsSection() {
                 />
               </div>
               <Button onClick={handleCreate} className="w-full">
-                Create
+                {t("common.create")}
               </Button>
             </div>
           </DialogContent>
@@ -575,25 +574,25 @@ function SectionsSection() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Semester:</span>
+        <span className="text-sm text-muted-foreground">{t("common.semester_colon")}</span>
         <SemesterPicker value={semesterId} onChange={setSemesterId} />
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Subject:</span>
+        <span className="text-sm text-muted-foreground">{t("common.subject_colon")}</span>
         <Select
           value={subjectId ?? ""}
           onValueChange={(v) => setSubjectId(v || null)}
         >
           <SelectTrigger className="w-full sm:w-[260px] h-9 text-sm">
-            <SelectValue placeholder="Select subject" />
+            <SelectValue placeholder={t("common.select_subject")} />
           </SelectTrigger>
           <SelectContent>
             {subjects.length === 0 && (
               <SelectItem value="__placeholder" disabled>
                 {semesterId
-                  ? "No subjects in this semester"
-                  : "Select a semester first"}
+                  ? t("settings.no_subjects_in_semester")
+                  : t("settings.select_semester_first")}
               </SelectItem>
             )}
             {subjects.map((sub) => (
@@ -609,8 +608,8 @@ function SectionsSection() {
       {sections.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {!semesterId || !subjectId
-            ? "Select a semester and subject to see its sections."
-            : `No sections yet for ${selectedSubject?.name ?? "this subject"}.`}
+            ? t("settings.select_sem_and_sub")
+            : t("settings.no_sections_for", { subject: selectedSubject?.name ?? t("settings.this_subject") })}
         </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -618,8 +617,8 @@ function SectionsSection() {
           <table className="w-full text-sm min-w-[360px]">
             <thead className="bg-muted/50">
               <tr>
-                <th className="text-left px-4 py-2 font-medium">Name</th>
-                <th className="text-right px-4 py-2 font-medium">Actions</th>
+                <th className="text-left px-4 py-2 font-medium">{t("common.name")}</th>
+                <th className="text-right px-4 py-2 font-medium">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -645,7 +644,7 @@ function SectionsSection() {
                         setEditingName(sec.name);
                       }}
                     >
-                      Edit
+                      {t("common.edit")}
                     </Button>
                     <Button
                       variant="ghost"
@@ -653,7 +652,7 @@ function SectionsSection() {
                       className="text-destructive hover:text-destructive"
                       onClick={() => handleDelete(sec.id)}
                     >
-                      Delete
+                      {t("common.delete")}
                     </Button>
                   </td>
                 </tr>
@@ -672,11 +671,11 @@ function SectionsSection() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Section</DialogTitle>
+            <DialogTitle>{t("settings.rename_section")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
-              <Label htmlFor="sec-rename">Name</Label>
+              <Label htmlFor="sec-rename">{t("common.name")}</Label>
               <Input
                 id="sec-rename"
                 value={editingName}
@@ -684,7 +683,7 @@ function SectionsSection() {
               />
             </div>
             <Button onClick={handleRename} className="w-full">
-              Update
+              {t("common.update")}
             </Button>
           </div>
         </DialogContent>
@@ -812,7 +811,7 @@ export default function Settings() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          Semester / Year
+          {t("settings.tab_semesters")}
         </button>
         <button
           onClick={() => setTab("subjects")}
@@ -822,7 +821,7 @@ export default function Settings() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          Subjects
+          {t("settings.tab_subjects")}
         </button>
         <button
           onClick={() => setTab("sections")}
@@ -832,7 +831,7 @@ export default function Settings() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          Sections
+          {t("settings.tab_sections")}
         </button>
       </div>
 

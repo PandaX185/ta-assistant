@@ -157,7 +157,7 @@ export default function Grades() {
   };
 
   const handleDeleteColumn = async (type: "quiz" | "assignment", colName: string, colDate: string) => {
-    if (!window.confirm(`Delete "${colName}" for all students?`)) return;
+    if (!window.confirm(t("grades.delete_column_confirm", { name: colName }))) return;
     try {
       await invoke(type === "quiz" ? "delete_quiz_column" : "delete_assignment_column", {
         semesterYearId: selectedSemesterYearId,
@@ -192,7 +192,7 @@ export default function Grades() {
           {selectedSubject?.name}
           {selectedSection && ` · ${selectedSection.name}`}
         </p>
-        <p className="text-muted-foreground animate-pulse">Loading...</p>
+        <p className="text-muted-foreground animate-pulse">{t("common.loading")}</p>
       </div>
     );
   }
@@ -210,7 +210,7 @@ export default function Grades() {
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          No students enrolled yet. Go to Students to enroll them first.
+          {t("grades.no_students_yet")}
         </p>
       </div>
     );
@@ -224,7 +224,7 @@ export default function Grades() {
           <p className="text-sm text-muted-foreground">
             {selectedSubject?.name}
             {selectedSection && ` · ${selectedSection.name}`} ·{" "}
-            {sheet.students.length} enrolled
+            {t("grades.enrolled", { count: sheet.students.length })}
           </p>
         </div>
 
@@ -236,15 +236,15 @@ export default function Grades() {
           }}
         >
           <DialogTrigger asChild>
-            <Button size="sm">+ New Graded Item</Button>
+            <Button size="sm">{t("grades.new_item")}</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>New Graded Item</DialogTitle>
+              <DialogTitle>{t("grades.new_item_title")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label>{t("grades.type")}</Label>
                 <Select
                   value={createType}
                   onValueChange={(v) => setCreateType(v as "quiz" | "assignment")}
@@ -253,21 +253,21 @@ export default function Grades() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="quiz">Quiz</SelectItem>
-                    <SelectItem value="assignment">Assignment</SelectItem>
+                    <SelectItem value="quiz">{t("grades.quiz")}</SelectItem>
+                    <SelectItem value="assignment">{t("grades.assignment")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Name</Label>
+                <Label>{t("common.name")}</Label>
                 <Input
-                  placeholder="e.g. Quiz 1"
+                  placeholder={t("grades.name_placeholder")}
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Max Score</Label>
+                <Label>{t("grades.max_score")}</Label>
                 <Input
                   type="number"
                   step="0.5"
@@ -277,7 +277,7 @@ export default function Grades() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Date</Label>
+                <Label>{t("common.date")}</Label>
                 <Input
                   type="date"
                   value={createDate}
@@ -285,7 +285,7 @@ export default function Grades() {
                 />
               </div>
               <Button onClick={handleCreate} className="w-full">
-                Create for all students
+                {t("grades.create_for_all")}
               </Button>
             </div>
           </DialogContent>
@@ -301,7 +301,7 @@ export default function Grades() {
         if (allColumns.length === 0) {
           return (
             <p className="text-sm text-muted-foreground">
-              No graded items yet. Click &ldquo;+ New Graded Item&rdquo; above.
+              {t("grades.no_graded_items", { newItem: t("grades.new_item") })}
             </p>
           );
         }
@@ -348,14 +348,14 @@ export default function Grades() {
                 className="text-destructive hover:underline"
                 onClick={() => handleDeleteColumn(active.type, active.name, active.date)}
               >
-                delete this item
+                {t("grades.delete_item")}
               </button>
             </div>
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left px-3 py-2">Student</th>
-                  <th className="text-center px-3 py-2">Score</th>
+                  <th className="text-left px-3 py-2">{t("grades.student_col")}</th>
+                  <th className="text-center px-3 py-2">{t("grades.score_col")}</th>
                 </tr>
               </thead>
               <tbody>

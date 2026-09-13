@@ -74,8 +74,8 @@ describe("FilterBar", () => {
 
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
 
-    expect(screen.getByText("Semester / Year")).toBeInTheDocument();
-    expect(screen.getByText("Subject")).toBeInTheDocument();
+    expect(screen.getByText("Select semester")).toBeInTheDocument();
+    expect(screen.getByText("Select subject")).toBeInTheDocument();
 
     // Select a semester — subject selection gets reset
     const user = userEvent.setup();
@@ -176,6 +176,6 @@ describe("FilterBar", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(useFilterStore.getState().loaded).toBe(false);
-    expect(screen.getByText("Semester / Year")).toBeInTheDocument();
+    expect(screen.getByText("Select semester")).toBeInTheDocument();
   });
 });

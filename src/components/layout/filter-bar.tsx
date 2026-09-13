@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Select,
   SelectContent,
@@ -7,8 +8,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFilterStore } from "@/stores/filter-store";
+import { localizeSeason } from "@/i18n";
 
 export default function FilterBar() {
+  const { t } = useTranslation();
   const {
     semesterYears,
     subjects,
@@ -55,17 +58,17 @@ export default function FilterBar() {
           }}
         >
           <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
-            <SelectValue placeholder="Semester / Year" />
+            <SelectValue placeholder={t("common.select_semester")} />
           </SelectTrigger>
           <SelectContent>
             {semesterYears.length === 0 && (
               <SelectItem value="__placeholder" disabled>
-                No semesters yet — create one in Settings
+                {t("common.no_semesters_yet")}
               </SelectItem>
             )}
             {semesterYears.map((sy) => (
               <SelectItem key={sy.id} value={sy.id}>
-                {sy.year} {sy.semester}
+                {sy.year} {localizeSeason(sy.semester)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -77,12 +80,12 @@ export default function FilterBar() {
           onValueChange={(val) => setSelectedSubjectId(val || null)}
         >
           <SelectTrigger className="w-full sm:w-[200px] h-8 text-xs">
-            <SelectValue placeholder="Subject" />
+            <SelectValue placeholder={t("common.select_subject")} />
           </SelectTrigger>
           <SelectContent>
             {subjects.length === 0 && (
               <SelectItem value="__placeholder" disabled>
-                No subjects yet
+                {t("common.no_subjects_yet")}
               </SelectItem>
             )}
             {subjects.map((sub) => (
@@ -101,12 +104,12 @@ export default function FilterBar() {
             onValueChange={(val) => setSelectedSectionId(val || null)}
           >
             <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs">
-              <SelectValue placeholder="Section" />
+              <SelectValue placeholder={t("common.section")} />
             </SelectTrigger>
             <SelectContent>
               {sections.length === 0 && (
                 <SelectItem value="__placeholder" disabled>
-                  No sections yet
+                  {t("common.no_sections_yet")}
                 </SelectItem>
               )}
               {sections.map((sec) => (

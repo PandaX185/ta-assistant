@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function SpotlightSearch({ open, onClose, onSelect }: Props) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -102,7 +104,7 @@ export function SpotlightSearch({ open, onClose, onSelect }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search students..."
+            placeholder={t("search.placeholder")}
             className="border-0 shadow-none text-lg px-0 focus-visible:ring-0"
           />
         </div>
@@ -111,13 +113,13 @@ export function SpotlightSearch({ open, onClose, onSelect }: Props) {
           {loading && (
             <div className="flex items-center justify-center py-8 text-muted-foreground">
               <span className="animate-pulse mr-2">⏳</span>
-              Searching...
+              {t("search.searching")}
             </div>
           )}
 
           {!loading && query && results.length === 0 && (
             <div className="py-8 text-center text-muted-foreground">
-              No results for "{query}"
+              {t("search.no_results", { query })}
             </div>
           )}
 
@@ -147,15 +149,15 @@ export function SpotlightSearch({ open, onClose, onSelect }: Props) {
 
           {!query && (
             <div className="py-8 text-center text-muted-foreground text-sm">
-              Type to search students across all subjects
+              {t("search.type_to_search")}
             </div>
           )}
         </div>
 
         <div className="p-3 border-t bg-muted/30 flex items-center gap-4 text-xs text-muted-foreground">
-          <span><kbd className="px-1.5 py-0.5 bg-muted border rounded text-[10px]">↑↓</kbd> Navigate</span>
-          <span><kbd className="px-1.5 py-0.5 bg-muted border rounded text-[10px]">Enter</kbd> Select</span>
-          <span><kbd className="px-1.5 py-0.5 bg-muted border rounded text-[10px]">Esc</kbd> Close</span>
+          <span><kbd className="px-1.5 py-0.5 bg-muted border rounded text-[10px]">↑↓</kbd> {t("search.navigate")}</span>
+          <span><kbd className="px-1.5 py-0.5 bg-muted border rounded text-[10px]">Enter</kbd> {t("search.select")}</span>
+          <span><kbd className="px-1.5 py-0.5 bg-muted border rounded text-[10px]">Esc</kbd> {t("search.close")}</span>
         </div>
       </div>
     </div>

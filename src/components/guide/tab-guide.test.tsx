@@ -80,7 +80,7 @@ describe("TabGuide", () => {
     render(<TabGuide open onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("مرحباً!")).toBeInTheDocument();
+      expect(screen.getByText("أهلًا بيك!")).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole("button", { name: "التالي" }));
     await waitFor(() => {

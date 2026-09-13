@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,7 @@ interface Props {
 }
 
 export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }: Props) {
+  const { t } = useTranslation();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -127,7 +129,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-xl">
-                  {detail?.student_name ?? "Loading..."}
+                  {detail?.student_name ?? t("common.loading")}
                 </DialogTitle>
                 <div className="flex gap-3 text-sm text-muted-foreground mt-1">
                   {detail?.student_code && (
@@ -140,7 +142,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
           </DialogHeader>
 
           {loading && (
-            <div className="py-12 text-center text-muted-foreground">Loading...</div>
+            <div className="py-12 text-center text-muted-foreground">{t("common.loading")}</div>
           )}
 
           {!loading && detail && (
@@ -149,14 +151,14 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
               {detail.quizzes.length > 0 && (
                 <section>
                   <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-2">
-                    Quizzes
+                    {t("studentDetail.quizzes")}
                   </h3>
                   <div className="border rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">Name</th>
-                          <th className="text-right px-3 py-1.5 font-medium">Score</th>
+                          <th className="text-left px-3 py-1.5 font-medium">{t("common.name")}</th>
+                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.score")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -169,7 +171,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                           </tr>
                         ))}
                         <tr className="border-t font-medium bg-muted/30">
-                          <td className="px-3 py-1.5">Total</td>
+                          <td className="px-3 py-1.5">{t("studentDetail.total")}</td>
                           <td className="px-3 py-1.5 text-right font-mono">
                             {quizTotal.toFixed(1)} / {quizMax.toFixed(1)}
                           </td>
@@ -184,14 +186,14 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
               {detail.assignments.length > 0 && (
                 <section>
                   <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-2">
-                    Assignments
+                    {t("studentDetail.assignments")}
                   </h3>
                   <div className="border rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">Name</th>
-                          <th className="text-right px-3 py-1.5 font-medium">Score</th>
+                          <th className="text-left px-3 py-1.5 font-medium">{t("common.name")}</th>
+                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.score")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -204,7 +206,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                           </tr>
                         ))}
                         <tr className="border-t font-medium bg-muted/30">
-                          <td className="px-3 py-1.5">Total</td>
+                          <td className="px-3 py-1.5">{t("studentDetail.total")}</td>
                           <td className="px-3 py-1.5 text-right font-mono">
                             {assignmentTotal.toFixed(1)} / {assignmentMax.toFixed(1)}
                           </td>
@@ -220,10 +222,10 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                 <section>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">
-                      Attendance
+                      {t("studentDetail.attendance")}
                     </h3>
                     <span className="text-xs text-muted-foreground">
-                      {presentCount}/{attTotal} present
+                      {t("studentDetail.present_count", { count: presentCount, total: attTotal })}
                       {attPct !== null ? ` (${attPct}%)` : ""}
                     </span>
                   </div>
@@ -231,9 +233,9 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">Date</th>
-                          <th className="text-left px-3 py-1.5 font-medium">Topic</th>
-                          <th className="text-right px-3 py-1.5 font-medium">Status</th>
+                          <th className="text-left px-3 py-1.5 font-medium">{t("common.date")}</th>
+                          <th className="text-left px-3 py-1.5 font-medium">{t("studentDetail.topic")}</th>
+                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.status")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -260,14 +262,14 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
               {detail.bonuses.length > 0 && (
                 <section>
                   <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-2">
-                    Bonuses &amp; Deductions
+                    {t("studentDetail.bonuses")}
                   </h3>
                   <div className="border rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">Reason</th>
-                          <th className="text-right px-3 py-1.5 font-medium">Value</th>
+                          <th className="text-left px-3 py-1.5 font-medium">{t("studentDetail.reason")}</th>
+                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.value")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -285,7 +287,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                           </tr>
                         ))}
                         <tr className="border-t font-medium bg-muted/30">
-                          <td className="px-3 py-1.5">Total Bonus</td>
+                          <td className="px-3 py-1.5">{t("studentDetail.total_bonus")}</td>
                           <td
                             className={`px-3 py-1.5 text-right font-mono ${
                               bonusTotal >= 0 ? "text-green-600" : "text-red-600"
@@ -304,7 +306,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
               {/* Empty state for each section */}
               {detail.quizzes.length === 0 && detail.assignments.length === 0 && detail.attendance.length === 0 && detail.bonuses.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No grades, attendance, or bonuses recorded yet.
+                  {t("studentDetail.no_records")}
                 </p>
               )}
 
@@ -314,9 +316,10 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <p className="text-sm text-muted-foreground">
-                    Quizzes: {quizTotal.toFixed(1)}/{quizMax.toFixed(1)}
-                    {" · "}Assignments: {assignmentTotal.toFixed(1)}/{assignmentMax.toFixed(1)}
-                    {bonusTotal !== 0 && <> · Bonus: {bonusTotal >= 0 ? "+" : ""}{bonusTotal.toFixed(1)}</>}
+                    {t("studentDetail.grand_quizzes", { value: `${quizTotal.toFixed(1)}/${quizMax.toFixed(1)}` })}
+                    {" · "}
+                    {t("studentDetail.grand_assignments", { value: `${assignmentTotal.toFixed(1)}/${assignmentMax.toFixed(1)}` })}
+                    {bonusTotal !== 0 && <>{" · "}{t("studentDetail.grand_bonus", { value: `${bonusTotal >= 0 ? "+" : ""}${bonusTotal.toFixed(1)}` })}</>}
                   </p>
                 </div>
                 <div className="text-right">
@@ -343,14 +346,14 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                   size="sm"
                   onClick={() => onEdit(enrollmentId)}
                 >
-                  Edit
+                  {t("common.edit")}
                 </Button>
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() => setDeleteConfirm(true)}
                 >
-                  Delete
+                  {t("common.delete")}
                 </Button>
               </div>
             </div>
@@ -362,19 +365,19 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
       <AlertDialog open={deleteConfirm} onOpenChange={setDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Student?</AlertDialogTitle>
+            <AlertDialogTitle>{t("studentDetail.delete_confirm")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>{detail?.student_name}</strong> and all
-              their records. This cannot be undone.
+              {t("studentDetail.delete_confirm_desc_1")} <strong>{detail?.student_name}</strong>{" "}
+              {t("studentDetail.delete_confirm_desc_2")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
