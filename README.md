@@ -1,6 +1,6 @@
 # Markbook
 
-A local-first desktop app for university teaching assistants. Track students, grades, and attendance — fully offline, no cloud, no account.
+A local-first app for desktop and Android, built for university teaching assistants. Track students, grades, and attendance — fully offline, no cloud, no account.
 
 **Stack:** Tauri 2 · React 19 · TypeScript · SQLite · Tailwind CSS · shadcn/ui
 
