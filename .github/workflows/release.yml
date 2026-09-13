@@ -139,6 +139,12 @@ jobs:
       - name: Init Android project
         run: npx tauri android init
 
+      # `android init` scaffolds the default template launcher icon; regenerate
+      # the android icons from the branded app-icon.svg so the APK ships the
+      # Markbook mark instead of the stock teal/yellow template.
+      - name: Regenerate app icons for Android
+        run: npx tauri icon app-icon.svg
+
       # The stock template has no release signing config (it only exists locally
       # in the gitignored gen/ dir). Inject it so gradle signs the APK; the
       # script fails loudly if the generated file drifts from the template.
