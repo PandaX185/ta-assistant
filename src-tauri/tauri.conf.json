@@ -1,6 +1,6 @@
 {
   "productName": "Markbook",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "com.pandax185.ta-assistant",
   "build": {
     "frontendDist": "../dist",

@@ -9,6 +9,7 @@ const detail = {
   student_name: "Alice Smith",
   student_code: "CS-101",
   student_email: "alice@uni.edu",
+  student_phone: "+966 50 123 4567",
   quizzes: [{ id: "q1", name: "Quiz 1", max_score: 10, score: 8 }],
   assignments: [{ id: "a1", name: "HW 1", max_score: 20, score: 15 }],
   attendance: [

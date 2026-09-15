@@ -111,6 +111,12 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/018_create_lecture_materials.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 19,
+            description: "add phone to students",
+            sql: include_str!("../../migrations/019_add_phone_to_students.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

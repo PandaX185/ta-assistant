@@ -22,9 +22,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Users, ClipboardList } from "lucide-react";
+import { Users, ClipboardList, Copy, Check } from "lucide-react";
 import { useFilterStore } from "@/stores/filter-store";
 import { StudentDetailDialog } from "@/components/students/student-detail-dialog";
+import { useCopyFeedback } from "@/lib/use-copy-feedback";
 
 interface StudentEnrollment {
   id: string;
@@ -33,6 +34,8 @@ interface StudentEnrollment {
   subject_id: string;
   student_name: string;
   student_code: string | null;
+  student_email: string | null;
+  student_phone: string | null;
 }
 
 interface StudentMatch {
@@ -40,6 +43,7 @@ interface StudentMatch {
   name: string;
   email: string | null;
   student_id: string | null;
+  phone: string | null;
 }
 
 export default function Students() {
@@ -62,9 +66,12 @@ export default function Students() {
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [studentId, setStudentId] = useState("");
   // find-or-create matches shown before creating a new student
   const [matches, setMatches] = useState<StudentMatch[]>([]);
+
+  const { copy: copyPhone, isCopied } = useCopyFeedback();
 
   // Detail dialog
   const [detailEnrollmentId, setDetailEnrollmentId] = useState<string | null>(null);
@@ -104,6 +111,7 @@ export default function Students() {
   const resetForm = () => {
     setName("");
     setEmail("");
+    setPhone("");
     setStudentId("");
     setEditId(null);
     setMatches([]);
@@ -112,6 +120,8 @@ export default function Students() {
   const openEdit = (enr: StudentEnrollment) => {
     setEditId(enr.student_id);
     setName(enr.student_name);
+    setEmail(enr.student_email ?? "");
+    setPhone(enr.student_phone ?? "");
     setStudentId(enr.student_code ?? "");
     setMatches([]);
     setOpen(true);
@@ -122,6 +132,7 @@ export default function Students() {
       name,
       email: email || null,
       studentId: studentId || null,
+      phone: phone || null,
     });
     if (selectedSemesterYearId && selectedSubjectId && selectedSectionId) {
       await invoke("create_enrollment", {
@@ -165,16 +176,19 @@ export default function Students() {
           name,
           email: email || null,
           studentId: studentId || null,
+          phone: phone || null,
         });
         resetForm();
         setOpen(false);
         loadEnrollments();
         return;
       }
-      // find-or-create: search by name (and ID when provided) before creating,
-      // so existing students are reused across subjects instead of duplicated
+      // find-or-create: search by name (and ID/phone when provided) before
+      // creating, so existing students are reused across subjects instead of
+      // duplicated
       const queries = [name.trim()];
       if (studentId.trim()) queries.push(studentId.trim());
+      if (phone.trim()) queries.push(phone.trim());
       const results = await Promise.all(
         queries.map((q) =>
           invoke<StudentMatch[]>("find_students", { query: q }),
@@ -215,7 +229,8 @@ export default function Students() {
     ? enrollments.filter(
         (e) =>
           e.student_name.toLowerCase().includes(search.toLowerCase()) ||
-          (e.student_code ?? "").toLowerCase().includes(search.toLowerCase()),
+          (e.student_code ?? "").toLowerCase().includes(search.toLowerCase()) ||
+          (e.student_phone ?? "").toLowerCase().includes(search.toLowerCase()),
       )
     : enrollments;
 
@@ -289,6 +304,21 @@ export default function Students() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="s-phone">{t("students.phone_optional")}</Label>
+                <Input
+                  id="s-phone"
+                  type="tel"
+                  inputMode="tel"
+                  dir="ltr"
+                  placeholder={t("students.phone_placeholder")}
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    setMatches([]);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="s-id">{t("students.student_id_optional")}</Label>
                 <Input
                   id="s-id"
@@ -330,6 +360,12 @@ export default function Students() {
                           <p className="text-sm font-medium truncate">{m.name}</p>
                           <p className="text-xs text-muted-foreground font-mono truncate">
                             {m.student_id ?? "—"}
+                            {m.phone && (
+                              <>
+                                {" · "}
+                                <span dir="ltr">{m.phone}</span>
+                              </>
+                            )}
                           </p>
                         </div>
                         <Button
@@ -395,11 +431,12 @@ export default function Students() {
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[420px]">
+            <table className="w-full text-sm min-w-[520px]">
               <thead className="bg-muted/50">
                 <tr>
                   <th className="text-left px-4 py-2 font-medium">{t("common.name")}</th>
                   <th className="text-left px-4 py-2 font-medium">{t("students.id")}</th>
+                  <th className="text-left px-4 py-2 font-medium">{t("students.phone_column")}</th>
                   <th className="text-right px-4 py-2 font-medium w-20">{t("common.actions")}</th>
                 </tr>
               </thead>
@@ -414,6 +451,33 @@ export default function Students() {
                     </td>
                     <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
                       {enr.student_code ?? "—"}
+                    </td>
+                    <td className="px-4 py-2">
+                      {enr.student_phone ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span dir="ltr" className="font-mono text-xs">
+                            {enr.student_phone}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                            aria-label={t("students.copy_phone")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyPhone(enr.student_id, enr.student_phone!);
+                            }}
+                          >
+                            {isCopied(enr.student_id) ? (
+                              <Check className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <Button

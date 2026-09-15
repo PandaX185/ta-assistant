@@ -32,7 +32,7 @@ fn global_search_impl(conn: &Connection, query: String) -> Result<Vec<SearchResu
              JOIN enrollments e ON e.student_id = s.id
              JOIN semester_years sy ON sy.id = e.semester_year_id
              JOIN subjects sub ON sub.id = e.subject_id
-             WHERE s.name LIKE ?1 OR s.student_id LIKE ?1
+             WHERE s.name LIKE ?1 OR s.student_id LIKE ?1 OR s.phone LIKE ?1
              ORDER BY s.name
              LIMIT 20",
         )
@@ -89,9 +89,9 @@ mod tests {
     fn seeded_conn() -> Connection {
         let conn = test_utils::test_conn();
         let (_sy, _sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
-        // Bob gets a student code; Alice doesn't
+        // Bob gets a student code + phone
         conn.execute(
-            "UPDATE students SET student_id = '2026-0042' WHERE id = 'stu-b'",
+            "UPDATE students SET student_id = '2026-0042', phone = '01099988877' WHERE id = 'stu-b'",
             [],
         )
         .unwrap();
@@ -169,5 +169,14 @@ mod tests {
         }
         let res = global_search_impl(&conn, "Bulk".into()).unwrap();
         assert_eq!(res.len(), 20);
+    }
+
+    #[test]
+    fn matches_phone() {
+        let conn = seeded_conn();
+        let res = global_search_impl(&conn, "01099".into()).unwrap();
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].label, "Bob");
+        assert_eq!(res[0].enrollment_id.as_deref(), Some("enr-b"));
     }
 }

@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Copy, Check } from "lucide-react";
+import { useCopyFeedback } from "@/lib/use-copy-feedback";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +56,7 @@ interface StudentDetail {
   student_name: string;
   student_code: string | null;
   student_email: string | null;
+  student_phone: string | null;
   quizzes: QuizItem[];
   assignments: AssignmentItem[];
   attendance: AttendanceItem[];
@@ -72,6 +75,7 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const { copy, isCopied } = useCopyFeedback();
 
   useEffect(() => {
     if (!enrollmentId) {
@@ -131,11 +135,33 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                 <DialogTitle className="text-xl">
                   {detail?.student_name ?? t("common.loading")}
                 </DialogTitle>
-                <div className="flex gap-3 text-sm text-muted-foreground mt-1">
+                <div className="flex gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
                   {detail?.student_code && (
                     <span className="font-mono">{detail.student_code}</span>
                   )}
                   {detail?.student_email && <span>{detail.student_email}</span>}
+                  {detail?.student_phone && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span dir="ltr" className="font-mono">
+                        {detail.student_phone}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                        aria-label={t("students.copy_phone")}
+                        onClick={() =>
+                          copy("detail", detail.student_phone as string)
+                        }
+                      >
+                        {isCopied("detail") ? (
+                          <Check className="h-3.5 w-3.5 text-green-500" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
