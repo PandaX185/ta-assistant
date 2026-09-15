@@ -21,7 +21,7 @@ describe("OnboardingWizard", () => {
     render(<OnboardingWizard onComplete={onComplete} />);
 
     // Step 1: language + theme
-    expect(screen.getByText("Welcome to Markbook")).toBeInTheDocument();
+    expect(screen.getByText("Welcome to xLa")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     // Step 2: profile — Next stays disabled until both fields are filled
@@ -105,7 +105,7 @@ describe("OnboardingWizard", () => {
     expect(screen.getByText("Your Profile")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByText("Welcome to Markbook")).toBeInTheDocument();
+    expect(screen.getByText("Welcome to xLa")).toBeInTheDocument();
   });
 
   it("shows the error when saving fails and does not complete", async () => {

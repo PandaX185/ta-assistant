@@ -1,10 +1,10 @@
 import { useTranslation } from "react-i18next";
 
-export function MarkbookMark({ className }: { className?: string }) {
+export function BrandMark({ className }: { className?: string }) {
   const { t } = useTranslation();
   return (
     <img
-      src="/brand/markbook-mark.svg"
+      src="/brand/xla-logo.png"
       alt={t("brand.name")}
       className={className}
       draggable={false}

@@ -1,6 +1,6 @@
 {
   "brand": {
-    "name": "Markbook"
+    "name": "xLa"
   },
   "common": {
     "loading": "جارٍ التحميل…",
@@ -31,7 +31,7 @@
     "subject_colon": "المادة:"
   },
   "onboarding": {
-    "welcome": "أهلاً بيك في Markbook",
+    "welcome": "أهلاً بيك في xLa",
     "choose_language": "اختار لغتك المفضلة",
     "english": "English",
     "arabic": "العربية",
@@ -62,7 +62,7 @@
     "get_started": "ابدأ الآن"
   },
   "lock": {
-    "title": "Markbook",
+    "title": "xLa",
     "description": "اكتب كلمة المرور عشان تفتح التطبيق",
     "password_placeholder": "كلمة المرور",
     "unlock": "فتح",
@@ -79,7 +79,7 @@
     "settings": "الإعدادات"
   },
   "topbar": {
-    "app_title": "Markbook",
+    "app_title": "xLa",
     "search_hint": "بحث (Ctrl+Shift+P)"
   },
   "dashboard": {
@@ -230,7 +230,7 @@
   },
   "updates": {
     "title": "التحديثات",
-    "description": "تحقق من إصدارات GitHub عشان تعرف لو فيه نسخة أحدث من Markbook.",
+    "description": "تحقق من إصدارات GitHub عشان تعرف لو فيه نسخة أحدث من xLa.",
     "check": "التحقق من التحديثات",
     "checking": "جارٍ التحقق…",
     "up_to_date": "أنت على أحدث إصدار ({{version}} هو الأحدث).",
@@ -239,7 +239,7 @@
     "size": "الحجم: {{size}}",
     "download_install": "تنزيل وتثبيت",
     "downloading": "جارٍ التنزيل…",
-    "permission_needed": "أُلغي التحديث — اسمح لـMarkbook بتثبيت تطبيقات غير معروفة ثم أعد المحاولة."
+    "permission_needed": "أُلغي التحديث — اسمح لـxLa بتثبيت تطبيقات غير معروفة ثم أعد المحاولة."
   },
   "guide": {
     "intro_title": "أهلًا بيك!",

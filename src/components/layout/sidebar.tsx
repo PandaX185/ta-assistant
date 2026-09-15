@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { MarkbookMark } from "./brand";
+import { BrandMark } from "./brand";
 import { navItems } from "./nav-items";
 
 export default function Sidebar() {
@@ -9,7 +9,7 @@ export default function Sidebar() {
 
   return (
     <aside className="hidden md:flex w-16 border-r bg-card flex-col items-center py-4 gap-2 shrink-0">
-      <MarkbookMark
+      <BrandMark
         className="w-8 h-8 mb-4 tracking-tight"
       />
       {navItems.map((item) => (

@@ -1,6 +1,6 @@
 {
   "brand": {
-    "name": "Markbook"
+    "name": "xLa"
   },
   "common": {
     "loading": "Loading…",
@@ -31,7 +31,7 @@
     "subject_colon": "Subject:"
   },
   "onboarding": {
-    "welcome": "Welcome to Markbook",
+    "welcome": "Welcome to xLa",
     "choose_language": "Choose your preferred language",
     "english": "English",
     "arabic": "العربية",
@@ -62,7 +62,7 @@
     "get_started": "Get Started"
   },
   "lock": {
-    "title": "Markbook",
+    "title": "xLa",
     "description": "Enter your password to unlock the app",
     "password_placeholder": "Password",
     "unlock": "Unlock",
@@ -79,7 +79,7 @@
     "settings": "Settings"
   },
   "topbar": {
-    "app_title": "Markbook",
+    "app_title": "xLa",
     "search_hint": "Search (Ctrl+Shift+P)"
   },
   "dashboard": {
@@ -230,7 +230,7 @@
   },
   "updates": {
     "title": "Updates",
-    "description": "Check GitHub releases for a newer version of Markbook.",
+    "description": "Check GitHub releases for a newer version of xLa.",
     "check": "Check for updates",
     "checking": "Checking…",
     "up_to_date": "You're up to date ({{version}} is the latest).",
@@ -239,7 +239,7 @@
     "size": "Size: {{size}}",
     "download_install": "Download & Install",
     "downloading": "Downloading…",
-    "permission_needed": "Update cancelled — allow Markbook to install unknown apps, then try again."
+    "permission_needed": "Update cancelled — allow xLa to install unknown apps, then try again."
   },
   "guide": {
     "intro_title": "Welcome!",
