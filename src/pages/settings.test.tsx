@@ -7,11 +7,16 @@ import {
   install,
   requestInstallPermission,
 } from "tauri-plugin-android-installer-api";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { useFilterStore } from "@/stores/filter-store";
 import Settings from "./settings";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
+}));
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+  save: vi.fn(),
 }));
 vi.mock("tauri-plugin-android-installer-api", () => ({
   canInstall: vi.fn(),
@@ -41,6 +46,8 @@ beforeEach(() => {
   vi.mocked(canInstall).mockReset();
   vi.mocked(install).mockReset();
   vi.mocked(requestInstallPermission).mockReset();
+  vi.mocked(openDialog).mockReset();
+  vi.mocked(saveDialog).mockReset();
   vi.spyOn(window, "confirm").mockReturnValue(true);
   useFilterStore.setState({
     semesterYears,
@@ -290,5 +297,73 @@ describe("Settings", () => {
       "open_downloaded",
       expect.anything(),
     );
+  });
+
+  it("gates import/export until semester, subject and section are chosen", async () => {
+    mockInvoke();
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await openTab(user, "Data");
+
+    expect(
+      await screen.findByText(/Select a semester, subject and section/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Export roster (CSV)" }),
+    ).not.toBeInTheDocument();
+    // Import is always available — it only needs the CSV file.
+    expect(
+      screen.getByRole("button", { name: "Choose CSV…" }),
+    ).toBeEnabled();
+  });
+
+  it("creates a backup at a user-chosen path", async () => {
+    mockInvoke();
+    vi.mocked(saveDialog).mockResolvedValue("/tmp/markbook-backup.json");
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await openTab(user, "Data");
+    await user.click(
+      await screen.findByRole("button", { name: "Create backup…" }),
+    );
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("backup_app_data", {
+        filePath: "/tmp/markbook-backup.json",
+      }),
+    );
+    expect(await screen.findByText(/Backup saved:/)).toBeInTheDocument();
+  });
+
+  it("restores from a backup only after confirmation", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "restore_app_data")
+        return Promise.resolve({ tables_restored: 13, rows_restored: 42 });
+      // The page reloads the filter store after a restore.
+      if (cmd === "get_semester_years") return Promise.resolve(semesterYears);
+      if (cmd === "get_subjects") return Promise.resolve([]);
+      if (cmd === "get_sections") return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+    vi.mocked(openDialog).mockResolvedValue("/tmp/markbook-backup.json");
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await openTab(user, "Data");
+    await user.click(
+      await screen.findByRole("button", { name: "Restore from backup…" }),
+    );
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("restore_app_data", {
+        filePath: "/tmp/markbook-backup.json",
+      }),
+    );
+    expect(window.confirm).toHaveBeenCalled();
+    expect(
+      await screen.findByText(/Restored 13 tables \(42 rows\)/),
+    ).toBeInTheDocument();
   });
 });

@@ -18,7 +18,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_android_installer::init())
-        .plugin(tauri_plugin_file_open::init());
+        .plugin(tauri_plugin_file_open::init())
+        .plugin(tauri_plugin_saf_io::init());
 
     // Desktop-only: the global-shortcut plugin (global-hotkey) has no
     // Android/iOS support. Registered under #[cfg(desktop)] so mobile builds
@@ -99,6 +100,12 @@ pub fn run() {
             commands::updates::check_for_updates,
             commands::updates::download_update,
             commands::updates::open_downloaded,
+            commands::data_io::import_students_csv,
+            commands::data_io::export_students_csv,
+            commands::data_io::export_grades_report_csv,
+            commands::data_io::save_text_file,
+            commands::data_io::backup_app_data,
+            commands::data_io::restore_app_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

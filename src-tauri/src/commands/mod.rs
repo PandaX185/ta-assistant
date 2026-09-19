@@ -1,4 +1,5 @@
 pub mod attendance_cmd;
+pub mod data_io;
 pub mod filters;
 pub mod grades;
 pub mod materials;

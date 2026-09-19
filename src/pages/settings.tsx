@@ -8,7 +8,11 @@ import {
   install,
   requestInstallPermission,
 } from "tauri-plugin-android-installer-api";
-import { Download, HelpCircle, RefreshCw } from "lucide-react";
+import { Download, FileDown, FileUp, HelpCircle, RefreshCw, Save } from "lucide-react";
+import {
+  open as openDialog,
+  save as saveDialog,
+} from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -692,11 +696,252 @@ function SectionsSection() {
   );
 }
 
+/* ───── Data Section (import / export / backup) ───── */
+
+interface ImportReport {
+  created: number;
+  matched: number;
+  skipped: string[];
+  errors: string[];
+}
+
+interface RestoreSummary {
+  tables_restored: number;
+  rows_restored: number;
+}
+
+function DataSection() {
+  const { t } = useTranslation();
+  const {
+    semesterYears,
+    subjects,
+    sections,
+    selectedSemesterYearId,
+    selectedSubjectId,
+    selectedSectionId,
+    loadData,
+    loadSubjects,
+    loadSections,
+  } = useFilterStore();
+  const [importing, setImporting] = useState(false);
+  const [report, setReport] = useState<ImportReport | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const ready = Boolean(
+    selectedSemesterYearId && selectedSubjectId && selectedSectionId,
+  );
+
+  const run = async (action: () => Promise<void>) => {
+    setMessage(null);
+    setError(null);
+    try {
+      await action();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const handleImport = () =>
+    run(async () => {
+      const path = await openDialog({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!path) return;
+      setImporting(true);
+      try {
+        const rep = await invoke<ImportReport>("import_students_csv", {
+          semesterYearId: selectedSemesterYearId,
+          subjectId: selectedSubjectId,
+          sectionId: selectedSectionId,
+          filePath: path,
+        });
+        setReport(rep);
+      } finally {
+        setImporting(false);
+      }
+    });
+
+  const handleExportRoster = () =>
+    run(async () => {
+      const path = await saveDialog({
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!path) return;
+      const written = await invoke<string>("export_students_csv", {
+        semesterYearId: selectedSemesterYearId,
+        subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
+        filePath: path,
+      });
+      setMessage(`${t("settings.data_saved_to")} ${written}`);
+    });
+
+  const handleExportReport = () =>
+    run(async () => {
+      const path = await saveDialog({
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!path) return;
+      const written = await invoke<string>("export_grades_report_csv", {
+        semesterYearId: selectedSemesterYearId,
+        subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
+        filePath: path,
+      });
+      setMessage(`${t("settings.data_saved_to")} ${written}`);
+    });
+
+  const handleBackup = () =>
+    run(async () => {
+      const path = await saveDialog({
+        filters: [{ name: "Markbook backup", extensions: ["json"] }],
+      });
+      if (!path) return;
+      const written = await invoke<string>("backup_app_data", { filePath: path });
+      setMessage(`${t("settings.data_backup_done")} ${written}`);
+    });
+
+  const handleRestore = () =>
+    run(async () => {
+      const path = await openDialog({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Markbook backup", extensions: ["json"] }],
+      });
+      if (!path) return;
+      if (!window.confirm(t("settings.data_restore_confirm"))) return;
+      const summary = await invoke<RestoreSummary>("restore_app_data", {
+        filePath: path,
+      });
+      // The database was replaced wholesale — reload everything the filter
+      // bar caches so the UI reflects the restored data without a restart.
+      await loadData();
+      await loadSubjects();
+      await loadSections();
+      setMessage(
+        t("settings.data_restore_done", {
+          tables: summary.tables_restored,
+          rows: summary.rows_restored,
+        }),
+      );
+    });
+
+  const selectedSemester = semesterYears.find(
+    (s) => s.id === selectedSemesterYearId,
+  );
+  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
+  const selectedSection = sections.find((s) => s.id === selectedSectionId);
+
+  return (
+    <section className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {t("settings.data_description")}
+      </p>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {message && <p className="text-sm text-muted-foreground">{message}</p>}
+
+      <div className="rounded-lg border p-4 space-y-3">
+        <div>
+          <h3 className="font-medium">{t("settings.data_import_title")}</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("settings.data_import_description")}
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={handleImport} disabled={importing}>
+          <FileUp />
+          {importing ? t("settings.data_importing") : t("settings.data_import_button")}
+        </Button>
+        {report && (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+            <p className="font-medium">{t("settings.data_report_title")}</p>
+            <p>{t("settings.data_created", { count: report.created })}</p>
+            <p>{t("settings.data_matched", { count: report.matched })}</p>
+            <p>{t("settings.data_skipped", { count: report.skipped.length })}</p>
+            <p>{t("settings.data_errors", { count: report.errors.length })}</p>
+            {(report.skipped.length > 0 || report.errors.length > 0) && (
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-md border bg-background p-2 text-xs text-muted-foreground whitespace-pre-wrap">
+                {[...report.skipped, ...report.errors].join("\n")}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border p-4 space-y-3">
+        <div>
+          <h3 className="font-medium">{t("settings.data_export_title")}</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("settings.data_report_description")}
+          </p>
+        </div>
+        {ready ? (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={handleExportRoster}>
+              <FileDown />
+              {t("settings.data_export_roster")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleExportReport}>
+              <FileDown />
+              {t("settings.data_export_report")}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {t("settings.data_select_all_three")}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            {t("settings.data_semester_colon")}{" "}
+            {selectedSemester
+              ? `${selectedSemester.year} ${localizeSeason(selectedSemester.semester)}`
+              : "—"}
+          </span>
+          <span>
+            {t("settings.data_subject_colon")} {selectedSubject?.name ?? "—"}
+          </span>
+          <span>
+            {t("settings.data_section_colon")} {selectedSection?.name ?? "—"}
+          </span>
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-4 space-y-3">
+        <div>
+          <h3 className="font-medium">{t("settings.data_backup_title")}</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("settings.data_backup_description")}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={handleBackup}>
+            <Save />
+            {t("settings.data_backup_button")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={handleRestore}
+          >
+            <FileUp />
+            {t("settings.data_restore_button")}
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ───── Page ───── */
 
 export default function Settings() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"semesters" | "subjects" | "sections">(
+  const [tab, setTab] = useState<"semesters" | "subjects" | "sections" | "data">(
     "semesters",
   );
   const [version, setVersion] = useState<string | null>(null);
@@ -833,14 +1078,26 @@ export default function Settings() {
         >
           {t("settings.tab_sections")}
         </button>
+        <button
+          onClick={() => setTab("data")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === "data"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {t("settings.tab_data")}
+        </button>
       </div>
 
       {tab === "semesters" ? (
         <SemesterYearSection />
       ) : tab === "subjects" ? (
         <SubjectSection />
-      ) : (
+      ) : tab === "sections" ? (
         <SectionsSection />
+      ) : (
+        <DataSection />
       )}
 
       {/* Updates */}

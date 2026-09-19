@@ -20,6 +20,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-android-installer = "0.1"
 tauri-plugin-file-open = { path = "plugins/file-open" }
+tauri-plugin-saf-io = { path = "plugins/saf-io" }
 ureq = { version = "2", default-features = false, features = ["tls"] }
 semver = "1"
 percent-encoding = "2"
@@ -35,6 +36,7 @@ uuid = { version = "1", features = ["v4"] }
 # so Android/iOS builds never compile this dependency.
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
 tauri-plugin-global-shortcut = { version = "2", features = [] }
+chrono = "0.4"
 
 [profile.release]
 strip = true

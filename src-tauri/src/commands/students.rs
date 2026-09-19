@@ -111,7 +111,7 @@ pub fn create_student(
     create_student_impl(&conn, name, email, student_id, phone)
 }
 
-fn create_student_impl(
+pub(crate) fn create_student_impl(
     conn: &Connection,
     name: String,
     email: Option<String>,
@@ -159,10 +159,10 @@ fn update_student_impl(
 #[tauri::command]
 pub fn delete_student(app: AppHandle, id: String) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    delete_student_impl(&conn, id)
+    delete_student_impl(&conn, &id)
 }
 
-fn delete_student_impl(conn: &Connection, id: String) -> Result<(), String> {
+pub(crate) fn delete_student_impl(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM students WHERE id = ?1", rusqlite::params![id])
         .map_err(|e| format!("Delete student failed: {e}"))?;
     Ok(())
@@ -232,7 +232,7 @@ pub fn create_enrollment(
     create_enrollment_impl(&conn, student_id, semester_year_id, subject_id, section_id)
 }
 
-fn create_enrollment_impl(
+pub(crate) fn create_enrollment_impl(
     conn: &Connection,
     student_id: String,
     semester_year_id: String,
@@ -512,7 +512,7 @@ mod tests {
         let conn = test_utils::test_conn();
         let (sy, sub, a, _b) = test_utils::seed_basic_scenario(&conn);
         test_utils::seed_section(&conn, "sec-1", &sy, &sub);
-        delete_student_impl(&conn, a).unwrap();
+        delete_student_impl(&conn, &a).unwrap();
         let enr = get_enrollments_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(enr.len(), 1);
         assert_eq!(enr[0].student_name, "Bob");
