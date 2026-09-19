@@ -124,9 +124,21 @@ pub fn delete_lecture_impl(
     if deleted == 0 {
         return Err("Lecture not found".into());
     }
-    // Best-effort: cascade already dropped the DB rows, now remove any attached
-    // files on disk. A missing folder (no material ever attached) is fine.
-    let _ = std::fs::remove_dir_all(materials.join(&id));
+    // Best-effort: remove any attached files on disk. A missing folder (no
+    // material ever attached) is fine. Since migration 020 a subject_lecture
+    // can share this id (materials were migrated by id reuse) and owns the
+    // same folder — only remove it when no subject_lecture still claims it.
+    let claimed: Option<i64> = conn
+        .query_row(
+            "SELECT 1 FROM subject_lectures WHERE id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+    if claimed.is_none() {
+        let _ = std::fs::remove_dir_all(materials.join(&id));
+    }
     Ok(())
 }
 

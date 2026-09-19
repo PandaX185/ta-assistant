@@ -22,6 +22,10 @@ pub struct LectureInfo {
     pub title: Option<String>,
     pub subject_name: String,
     pub section_name: Option<String>,
+    /// The subject_lecture that carries this attendance lecture's materials,
+    /// when one exists (migration 020 reuses the same id). Lets the minimal
+    /// lecture page deep-link into the Materials tab.
+    pub subject_lecture_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -149,10 +153,11 @@ pub fn get_lecture(app: AppHandle, lecture_id: String) -> Result<LectureInfo, St
 fn get_lecture_impl(conn: &Connection, lecture_id: &str) -> Result<LectureInfo, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT l.id, l.date, l.title, s.name, sec.name
+            "SELECT l.id, l.date, l.title, s.name, sec.name, sl.id
              FROM lectures l
              JOIN subjects s ON s.id = l.subject_id
              LEFT JOIN sections sec ON sec.id = l.section_id
+             LEFT JOIN subject_lectures sl ON sl.id = l.id
              WHERE l.id = ?1",
         )
         .map_err(|e| format!("Query prepare failed: {e}"))?;
@@ -163,12 +168,179 @@ fn get_lecture_impl(conn: &Connection, lecture_id: &str) -> Result<LectureInfo, 
             title: row.get(2)?,
             subject_name: row.get(3)?,
             section_name: row.get(4)?,
+            subject_lecture_id: row.get(5)?,
         })
     })
     .map_err(|e| match e {
         rusqlite::Error::QueryReturnedNoRows => "Lecture not found".to_string(),
         e => format!("Query failed: {e}"),
     })
+}
+
+// ---------------------------------------------------------------------------
+// Subject lectures (the Materials tab's own groupings)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct SubjectLectureInfo {
+    pub id: String,
+    pub title: String,
+    pub date: Option<String>,
+    pub created_at: i64,
+    pub file_count: i64,
+    pub link_count: i64,
+    pub has_note: bool,
+}
+
+/// Every material command targets a subject_lecture — never an attendance
+/// lecture. This is the single guard enforcing that boundary.
+fn ensure_subject_lecture(conn: &Connection, lecture_id: &str) -> Result<(), String> {
+    let exists: Option<i64> = conn
+        .query_row(
+            "SELECT 1 FROM subject_lectures WHERE id = ?1",
+            rusqlite::params![lecture_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("Query failed: {e}"))?;
+    if exists.is_none() {
+        return Err("Subject lecture not found".to_string());
+    }
+    Ok(())
+}
+
+fn get_subject_lectures_impl(
+    conn: &Connection,
+    subject_id: &str,
+) -> Result<Vec<SubjectLectureInfo>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT sl.id, sl.title, sl.date, sl.created_at,
+                    (SELECT COUNT(*) FROM material_files f WHERE f.lecture_id = sl.id),
+                    (SELECT COUNT(*) FROM material_links k WHERE k.lecture_id = sl.id),
+                    EXISTS (SELECT 1 FROM material_notes n WHERE n.lecture_id = sl.id)
+             FROM subject_lectures sl
+             WHERE sl.subject_id = ?1
+             ORDER BY (sl.date IS NULL), sl.date DESC, sl.created_at DESC, sl.id",
+        )
+        .map_err(|e| format!("Query prepare failed: {e}"))?;
+    let rows = stmt
+        .query_map(rusqlite::params![subject_id], |row| {
+            Ok(SubjectLectureInfo {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                date: row.get(2)?,
+                created_at: row.get(3)?,
+                file_count: row.get(4)?,
+                link_count: row.get(5)?,
+                has_note: row.get::<_, i64>(6)? != 0,
+            })
+        })
+        .map_err(|e| format!("Query failed: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Row failed: {e}"))?;
+    Ok(rows)
+}
+
+fn create_subject_lecture_impl(
+    conn: &Connection,
+    subject_id: &str,
+    title: &str,
+    date: Option<String>,
+) -> Result<SubjectLectureInfo, String> {
+    if title.trim().is_empty() {
+        return Err("Title is required".to_string());
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    let created_at = now_millis();
+    conn.execute(
+        "INSERT INTO subject_lectures (id, subject_id, title, date, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![id, subject_id, title.trim(), date, created_at],
+    )
+    .map_err(|e| format!("Create subject lecture failed: {e}"))?;
+    Ok(SubjectLectureInfo {
+        id,
+        title: title.trim().to_string(),
+        date,
+        created_at,
+        file_count: 0,
+        link_count: 0,
+        has_note: false,
+    })
+}
+
+fn update_subject_lecture_impl(
+    conn: &Connection,
+    id: &str,
+    title: &str,
+    date: Option<String>,
+) -> Result<(), String> {
+    if title.trim().is_empty() {
+        return Err("Title is required".to_string());
+    }
+    let affected = conn
+        .execute(
+            "UPDATE subject_lectures SET title = ?2, date = ?3 WHERE id = ?1",
+            rusqlite::params![id, title.trim(), date],
+        )
+        .map_err(|e| format!("Update subject lecture failed: {e}"))?;
+    if affected == 0 {
+        return Err("Subject lecture not found".to_string());
+    }
+    Ok(())
+}
+
+fn delete_subject_lecture_impl(conn: &Connection, root: &Path, id: &str) -> Result<(), String> {
+    let deleted = conn
+        .execute(
+            "DELETE FROM subject_lectures WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .map_err(|e| format!("Delete subject lecture failed: {e}"))?;
+    if deleted == 0 {
+        return Err("Subject lecture not found".to_string());
+    }
+    // Rows cascaded; remove the folder best-effort (same as lecture delete).
+    let _ = fs::remove_dir_all(root.join(id));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_subject_lectures(
+    app: AppHandle,
+    subject_id: String,
+) -> Result<Vec<SubjectLectureInfo>, String> {
+    let conn = crate::db::open_db(&app)?;
+    get_subject_lectures_impl(&conn, &subject_id)
+}
+
+#[tauri::command]
+pub fn create_subject_lecture(
+    app: AppHandle,
+    subject_id: String,
+    title: String,
+    date: Option<String>,
+) -> Result<SubjectLectureInfo, String> {
+    let conn = crate::db::open_db(&app)?;
+    create_subject_lecture_impl(&conn, &subject_id, &title, date)
+}
+
+#[tauri::command]
+pub fn update_subject_lecture(
+    app: AppHandle,
+    id: String,
+    title: String,
+    date: Option<String>,
+) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    update_subject_lecture_impl(&conn, &id, &title, date)
+}
+
+#[tauri::command]
+pub fn delete_subject_lecture(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    delete_subject_lecture_impl(&conn, &materials_root(&app)?, &id)
 }
 
 #[tauri::command]
@@ -184,9 +356,10 @@ fn get_lecture_materials_impl(
     conn: &Connection,
     lecture_id: &str,
 ) -> Result<MaterialsBundle, String> {
+    ensure_subject_lecture(conn, lecture_id)?;
     let note = conn
         .query_row(
-            "SELECT id, lecture_id, content_md, updated_at FROM lecture_notes
+            "SELECT id, lecture_id, content_md, updated_at FROM material_notes
              WHERE lecture_id = ?1",
             rusqlite::params![lecture_id],
             |row| {
@@ -206,7 +379,7 @@ fn get_lecture_materials_impl(
         let mut stmt = conn
             .prepare(
                 "SELECT id, lecture_id, file_name, stored_path, mime_type, file_size, created_at
-                 FROM lecture_files WHERE lecture_id = ?1 ORDER BY created_at ASC, id ASC",
+                 FROM material_files WHERE lecture_id = ?1 ORDER BY created_at ASC, id ASC",
             )
             .map_err(|e| format!("Query prepare failed: {e}"))?;
         let rows = stmt
@@ -232,7 +405,7 @@ fn get_lecture_materials_impl(
         let mut stmt = conn
             .prepare(
                 "SELECT id, lecture_id, title, url, created_at
-                 FROM lecture_links WHERE lecture_id = ?1 ORDER BY created_at ASC, id ASC",
+                 FROM material_links WHERE lecture_id = ?1 ORDER BY created_at ASC, id ASC",
             )
             .map_err(|e| format!("Query prepare failed: {e}"))?;
         let rows = stmt
@@ -270,9 +443,10 @@ fn save_note_impl(
     lecture_id: &str,
     content_md: &str,
 ) -> Result<NoteInfo, String> {
+    ensure_subject_lecture(conn, lecture_id)?;
     let id = if let Some(id) = conn
         .query_row(
-            "SELECT id FROM lecture_notes WHERE lecture_id = ?1",
+            "SELECT id FROM material_notes WHERE lecture_id = ?1",
             rusqlite::params![lecture_id],
             |row| row.get::<_, String>(0),
         )
@@ -285,7 +459,7 @@ fn save_note_impl(
     };
     let updated_at = now_millis();
     conn.execute(
-        "INSERT INTO lecture_notes (id, lecture_id, content_md, updated_at)
+        "INSERT INTO material_notes (id, lecture_id, content_md, updated_at)
          VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(lecture_id) DO UPDATE SET content_md = excluded.content_md, updated_at = excluded.updated_at",
         rusqlite::params![id, lecture_id, content_md, updated_at],
@@ -354,6 +528,7 @@ fn attach_files_impl(
     lecture_id: &str,
     source_paths: &[String],
 ) -> Result<AttachResult, String> {
+    ensure_subject_lecture(conn, lecture_id)?;
     let mut files = Vec::new();
     let mut errors = Vec::new();
     let dir = root.join(lecture_id);
@@ -419,6 +594,7 @@ fn attach_content_file(
     lecture_id: &str,
     incoming: &IncomingAttach,
 ) -> Result<FileInfo, String> {
+    ensure_subject_lecture(conn, lecture_id)?;
     use tauri_plugin_fs::{FilePath, FsExt};
     let path: FilePath = incoming
         .source
@@ -526,7 +702,7 @@ fn insert_file_row(
     let id = uuid::Uuid::new_v4().to_string();
     let created_at = now_millis();
     conn.execute(
-        "INSERT INTO lecture_files (id, lecture_id, file_name, stored_path, mime_type, file_size, created_at)
+        "INSERT INTO material_files (id, lecture_id, file_name, stored_path, mime_type, file_size, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         rusqlite::params![
             id,
@@ -559,7 +735,7 @@ pub fn delete_file(app: AppHandle, file_id: String) -> Result<(), String> {
 fn delete_file_impl(conn: &Connection, root: &Path, file_id: &str) -> Result<(), String> {
     let stored_path: String = conn
         .query_row(
-            "SELECT stored_path FROM lecture_files WHERE id = ?1",
+            "SELECT stored_path FROM material_files WHERE id = ?1",
             rusqlite::params![file_id],
             |row| row.get(0),
         )
@@ -568,7 +744,7 @@ fn delete_file_impl(conn: &Connection, root: &Path, file_id: &str) -> Result<(),
         .ok_or_else(|| "File not found".to_string())?;
 
     conn.execute(
-        "DELETE FROM lecture_files WHERE id = ?1",
+        "DELETE FROM material_files WHERE id = ?1",
         rusqlite::params![file_id],
     )
     .map_err(|e| format!("Delete file failed: {e}"))?;
@@ -585,7 +761,7 @@ fn delete_file_impl(conn: &Connection, root: &Path, file_id: &str) -> Result<(),
 fn resolve_file_path(conn: &Connection, root: &Path, file_id: &str) -> Result<PathBuf, String> {
     let stored_path: String = conn
         .query_row(
-            "SELECT stored_path FROM lecture_files WHERE id = ?1",
+            "SELECT stored_path FROM material_files WHERE id = ?1",
             rusqlite::params![file_id],
             |row| row.get(0),
         )
@@ -628,6 +804,7 @@ fn add_link_impl(
     title: &str,
     url: &str,
 ) -> Result<LinkInfo, String> {
+    ensure_subject_lecture(conn, lecture_id)?;
     if title.trim().is_empty() {
         return Err("Title is required".to_string());
     }
@@ -637,7 +814,7 @@ fn add_link_impl(
     let id = uuid::Uuid::new_v4().to_string();
     let created_at = now_millis();
     conn.execute(
-        "INSERT INTO lecture_links (id, lecture_id, title, url, created_at)
+        "INSERT INTO material_links (id, lecture_id, title, url, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         rusqlite::params![id, lecture_id, title, url, created_at],
     )
@@ -676,7 +853,7 @@ fn update_link_impl(
     }
     let affected = conn
         .execute(
-            "UPDATE lecture_links SET title = ?2, url = ?3 WHERE id = ?1",
+            "UPDATE material_links SET title = ?2, url = ?3 WHERE id = ?1",
             rusqlite::params![link_id, title, url],
         )
         .map_err(|e| format!("Update link failed: {e}"))?;
@@ -695,7 +872,7 @@ pub fn delete_link(app: AppHandle, link_id: String) -> Result<(), String> {
 fn delete_link_impl(conn: &Connection, link_id: &str) -> Result<(), String> {
     let affected = conn
         .execute(
-            "DELETE FROM lecture_links WHERE id = ?1",
+            "DELETE FROM material_links WHERE id = ?1",
             rusqlite::params![link_id],
         )
         .map_err(|e| format!("Delete link failed: {e}"))?;
@@ -708,7 +885,7 @@ fn delete_link_impl(conn: &Connection, link_id: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::attendance_cmd::{create_lecture_impl, delete_lecture_impl};
+    use crate::commands::attendance_cmd::create_lecture_impl;
     use crate::commands::test_utils;
     use std::path::PathBuf;
 
@@ -742,6 +919,15 @@ mod tests {
         .unwrap()
     }
 
+    /// A subject_lecture for the materials tests — the only valid target of
+    /// material commands after migration 020.
+    fn seeded_subject_lecture(conn: &Connection) -> String {
+        let (_sy, sub, _a, _b) = test_utils::seed_basic_scenario(conn);
+        create_subject_lecture_impl(conn, &sub, "Theoretical intro", Some("2026-02-01".into()))
+            .unwrap()
+            .id
+    }
+
     fn write_source(root: &Path, name: &str, bytes: &[u8]) -> String {
         let p = root.join(name);
         fs::write(&p, bytes).expect("write source");
@@ -769,7 +955,7 @@ mod tests {
     #[test]
     fn save_note_upserts_not_replicates() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let first = save_note_impl(&conn, &lid, "# Intro").unwrap();
         let second = save_note_impl(&conn, &lid, "# Intro\n\nUpdated").unwrap();
         assert_eq!(first.id, second.id, "upsert keeps the same row");
@@ -779,7 +965,7 @@ mod tests {
         let note = bundle.note.expect("note present");
         assert_eq!(note.content_md, "# Intro\n\nUpdated");
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM lecture_notes", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM material_notes", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }
@@ -787,7 +973,7 @@ mod tests {
     #[test]
     fn empty_materials_bundle_has_no_note_and_empty_lists() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let bundle = get_lecture_materials_impl(&conn, &lid).unwrap();
         assert!(bundle.note.is_none());
         assert!(bundle.files.is_empty());
@@ -797,7 +983,7 @@ mod tests {
     #[test]
     fn attach_files_copies_into_lecture_dir_and_lists() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let src = temp_root("src");
         let root = temp_root("root");
         let p1 = write_source(&src, "slides.pdf", b"%PDF-1.4 test");
@@ -831,7 +1017,7 @@ mod tests {
     #[test]
     fn attach_files_reports_per_file_errors() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let src = temp_root("src");
         let root = temp_root("root");
         let good = write_source(&src, "ok.txt", b"hello");
@@ -878,7 +1064,7 @@ mod tests {
     #[test]
     fn store_attachment_bytes_persists_buffer_with_name() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let root = temp_root("root");
 
         let file =
@@ -930,7 +1116,7 @@ mod tests {
     #[test]
     fn delete_file_removes_row_and_disk_file() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let src = temp_root("src");
         let root = temp_root("root");
         let p = write_source(&src, "a.pdf", b"abc");
@@ -952,7 +1138,7 @@ mod tests {
     #[test]
     fn delete_file_tolerates_missing_disk_file() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let src = temp_root("src");
         let root = temp_root("root");
         let p = write_source(&src, "a.pdf", b"abc");
@@ -981,11 +1167,11 @@ mod tests {
     #[test]
     fn resolve_file_path_rejects_traversal_and_missing_files() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let root = temp_root("root");
         // A row whose stored_path escapes the root must be rejected.
         conn.execute(
-            "INSERT INTO lecture_files (id, lecture_id, file_name, stored_path, mime_type, file_size, created_at)
+            "INSERT INTO material_files (id, lecture_id, file_name, stored_path, mime_type, file_size, created_at)
              VALUES ('evil', ?1, 'x.txt', '../../evil.txt', 'text/plain', 1, 0)",
             rusqlite::params![lid],
         )
@@ -995,7 +1181,7 @@ mod tests {
 
         // Absolute stored_path also rejected.
         conn.execute(
-            "UPDATE lecture_files SET stored_path = '/etc/passwd' WHERE id = 'evil'",
+            "UPDATE material_files SET stored_path = '/etc/passwd' WHERE id = 'evil'",
             [],
         )
         .unwrap();
@@ -1011,7 +1197,7 @@ mod tests {
     #[test]
     fn resolve_file_path_returns_existing_file() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let src = temp_root("src");
         let root = temp_root("root");
         let p = write_source(&src, "ok.pdf", b"bytes");
@@ -1030,7 +1216,7 @@ mod tests {
     #[test]
     fn link_crud_validates_urls() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
 
         assert!(add_link_impl(&conn, &lid, "Docs", "ftp://x").is_err());
         assert!(add_link_impl(&conn, &lid, "  ", "https://ok.test").is_err());
@@ -1055,9 +1241,9 @@ mod tests {
     }
 
     #[test]
-    fn deleting_lecture_cascades_rows_and_removes_dir() {
+    fn deleting_subject_lecture_cascades_rows_and_removes_dir() {
         let conn = test_utils::test_conn();
-        let lid = seeded_lecture(&conn);
+        let lid = seeded_subject_lecture(&conn);
         let root = temp_root("root");
 
         save_note_impl(&conn, &lid, "abc").unwrap();
@@ -1067,20 +1253,104 @@ mod tests {
         attach_files_impl(&conn, &root, &lid, &[p]).unwrap();
         assert!(root.join(&lid).exists());
 
-        delete_lecture_impl(&conn, &root, lid.clone()).unwrap();
+        delete_subject_lecture_impl(&conn, &root, lid.clone().as_str()).unwrap();
 
         let note_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM lecture_notes", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM material_notes", [], |r| r.get(0))
             .unwrap();
         let file_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM lecture_files", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM material_files", [], |r| r.get(0))
             .unwrap();
         let link_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM lecture_links", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM material_links", [], |r| r.get(0))
             .unwrap();
         assert_eq!((note_count, file_count, link_count), (0, 0, 0));
         assert!(!root.join(&lid).exists(), "materials dir removed");
         let _ = fs::remove_dir_all(&src);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn subject_lecture_crud_and_listing() {
+        let conn = test_utils::test_conn();
+        let (_sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        let sl = create_subject_lecture_impl(&conn, &sub, "Week 1", Some("2026-02-01".into()))
+            .unwrap()
+            .id;
+        let sl2 = create_subject_lecture_impl(&conn, &sub, "Undated", None)
+            .unwrap()
+            .id;
+        assert!(create_subject_lecture_impl(&conn, &sub, "  ", None).is_err());
+        assert!(create_subject_lecture_impl(&conn, "nope", "x", None).is_err());
+
+        let list = get_subject_lectures_impl(&conn, &sub).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].id, sl, "dated entry sorts before the undated one");
+        assert_eq!(list[1].id, sl2);
+        assert!(!list[0].has_note);
+        assert_eq!((list[0].file_count, list[0].link_count), (0, 0));
+
+        update_subject_lecture_impl(&conn, &sl, "Week 1 — intro", None).unwrap();
+        assert!(update_subject_lecture_impl(&conn, "nope", "x", None).is_err());
+        let list = get_subject_lectures_impl(&conn, &sub).unwrap();
+        assert_eq!(list[0].title, "Week 1 — intro");
+        assert_eq!(list[0].date, None);
+    }
+
+    #[test]
+    fn material_commands_reject_attendance_lecture_ids() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        test_utils::seed_section(&conn, "sec-1", &sy, &sub);
+        create_lecture_impl(
+            &conn,
+            sub,
+            sy,
+            "sec-1".to_string(),
+            "2026-02-01".to_string(),
+            None,
+        )
+        .unwrap();
+        let lid: String = conn
+            .query_row("SELECT id FROM lectures WHERE date = '2026-02-01'", [], |r| r.get(0))
+            .unwrap();
+        assert!(save_note_impl(&conn, &lid, "x").is_err());
+        assert!(add_link_impl(&conn, &lid, "L", "https://x.test").is_err());
+        let root = temp_root("root");
+        assert!(attach_files_impl(&conn, &root, &lid, &[]).is_err());
+        assert!(get_lecture_materials_impl(&conn, &lid).is_err());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn get_lecture_reports_subject_lecture_mapping() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        test_utils::seed_section(&conn, "sec-1", &sy, &sub);
+        create_lecture_impl(
+            &conn,
+            sub.clone(),
+            sy,
+            "sec-1".to_string(),
+            "2026-02-01".to_string(),
+            None,
+        )
+        .unwrap();
+        let lid: String = conn
+            .query_row("SELECT id FROM lectures WHERE date = '2026-02-01'", [], |r| r.get(0))
+            .unwrap();
+        assert!(get_lecture_impl(&conn, &lid).unwrap().subject_lecture_id.is_none());
+
+        // Migration 020 links the two by REUSING the lecture id — simulate it.
+        conn.execute(
+            "INSERT INTO subject_lectures (id, subject_id, title, date, created_at)
+             VALUES (?1, ?2, 'Mapped', '2026-02-01', 0)",
+            rusqlite::params![lid, sub],
+        )
+        .unwrap();
+        assert_eq!(
+            get_lecture_impl(&conn, &lid).unwrap().subject_lecture_id.as_deref(),
+            Some(lid.as_str())
+        );
     }
 }

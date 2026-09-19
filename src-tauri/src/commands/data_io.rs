@@ -797,9 +797,10 @@ const BACKUP_TABLES: &[&str] = &[
     "lectures",
     "attendance",
     "bonuses",
-    "lecture_notes",
-    "lecture_files",
-    "lecture_links",
+    "subject_lectures",
+    "material_notes",
+    "material_files",
+    "material_links",
 ];
 
 const BACKUP_APP: &str = "markbook";
@@ -1374,8 +1375,14 @@ mod tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO lecture_notes (id, lecture_id, content_md, updated_at)
-             VALUES ('n1', 'l1', '# Hello', 123)",
+            "INSERT INTO subject_lectures (id, subject_id, title, date, created_at)
+             VALUES ('sl-1', ?1, 'Week 1', '2026-02-01', 100)",
+            params![sub],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO material_notes (id, lecture_id, content_md, updated_at)
+             VALUES ('mn-1', 'sl-1', '# Subject note', 200)",
             [],
         )
         .unwrap();
@@ -1406,7 +1413,8 @@ mod tests {
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM lectures"), 1);
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM attendance"), 1);
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM bonuses"), 1);
-        assert_eq!(count(&conn, "SELECT COUNT(*) FROM lecture_notes"), 1);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM subject_lectures"), 1);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM material_notes"), 1);
         let score: f64 = conn
             .query_row("SELECT score FROM quizzes WHERE id = 'q1'", [], |r| r.get(0))
             .unwrap();
@@ -1436,7 +1444,8 @@ mod tests {
         assert_eq!(count(&fresh, "SELECT COUNT(*) FROM students"), 2);
         assert_eq!(count(&fresh, "SELECT COUNT(*) FROM enrollments"), 2);
         assert_eq!(count(&fresh, "SELECT COUNT(*) FROM quizzes"), 1);
-        assert_eq!(count(&fresh, "SELECT COUNT(*) FROM lecture_notes"), 1);
+        assert_eq!(count(&fresh, "SELECT COUNT(*) FROM subject_lectures"), 1);
+        assert_eq!(count(&fresh, "SELECT COUNT(*) FROM material_notes"), 1);
         // Migration bookkeeping must survive the restore.
         assert_eq!(
             count(&fresh, "SELECT COUNT(*) FROM _schema_migrations"),

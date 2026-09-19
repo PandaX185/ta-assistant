@@ -117,6 +117,12 @@ pub fn get_migrations() -> Vec<Migration> {
             sql: include_str!("../../migrations/019_add_phone_to_students.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 20,
+            description: "subject-scoped materials (subject_lectures + material_* tables)",
+            sql: include_str!("../../migrations/020_subject_materials.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -280,6 +286,142 @@ mod tests {
             semester_years_count, 1,
             "migration 2 took effect after re-run"
         );
+    }
+
+    /// Migration 020 rebuilds materials as subject-scoped: only attendance
+    /// lectures that actually HAVE materials get a subject_lectures row (with
+    /// the SAME id, so on-disk materials/<id>/ folders stay valid), material
+    /// rows are re-parented with ids preserved, and the old lecture_* tables
+    /// are gone.
+    #[test]
+    fn migration_020_reparents_materials_with_stable_ids() {
+        // Build the PRE-020 state by hand: run migrations 1..20 exclusive,
+        // seed an attendance lecture with materials + one without.
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+        for m in get_migrations().iter().filter(|m| m.version < 20) {
+            conn.execute_batch(&format!(
+                "PRAGMA foreign_keys = OFF; BEGIN TRANSACTION; {}; \
+                 CREATE TABLE IF NOT EXISTS _schema_migrations (version INTEGER PRIMARY KEY); \
+                 INSERT INTO _schema_migrations (version) VALUES ({}); COMMIT;",
+                m.sql, m.version
+            ))
+            .unwrap_or_else(|e| panic!("migration {} failed: {e}", m.version));
+        }
+        let sub = "sub-1";
+        let sy = "sy-1";
+        conn.execute(
+            "INSERT INTO semester_years (id, year, semester) VALUES (?1, 2026, 'Fall')",
+            rusqlite::params![sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO subjects (id, name, semester_year_id) VALUES (?1, 'Databases', ?2)",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date)
+             VALUES ('l-with', ?1, ?2, NULL, 'Stored notes', '2026-02-01')",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date)
+             VALUES ('l-bare', ?1, ?2, NULL, NULL, '2026-02-08')",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO lecture_notes (id, lecture_id, content_md, updated_at)
+             VALUES ('n1', 'l-with', '# Hello', 123)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO lecture_files (id, lecture_id, file_name, stored_path, mime_type, file_size, created_at)
+             VALUES ('f1', 'l-with', 'a.pdf', 'l-with/uuid.pdf', 'application/pdf', 4, 124)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO lecture_links (id, lecture_id, title, url, created_at)
+             VALUES ('k1', 'l-with', 'Docs', 'https://x.test', 125)",
+            [],
+        )
+        .unwrap();
+
+        // Apply 020 exactly like the runner does (FK off, own transaction).
+        conn.execute_batch(&format!(
+            "PRAGMA foreign_keys = OFF; BEGIN TRANSACTION; {}; \
+             INSERT INTO _schema_migrations (version) VALUES (20); COMMIT;",
+            include_str!("../../migrations/020_subject_materials.sql")
+        ))
+        .unwrap();
+
+        // Subject lecture created with the SAME id, title/date carried over.
+        let (sl_sub, sl_title, sl_date): (String, String, String) = conn
+            .query_row(
+                "SELECT subject_id, title, date FROM subject_lectures WHERE id = 'l-with'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(sl_sub, sub);
+        assert_eq!(sl_title, "Stored notes");
+        assert_eq!(sl_date, "2026-02-01");
+        let bare: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM subject_lectures WHERE id = 'l-bare'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(bare, 0, "attendance lecture without materials is not copied");
+
+        // Material rows re-parented, ids and disk paths preserved.
+        let note: String = conn
+            .query_row(
+                "SELECT content_md FROM material_notes WHERE lecture_id = 'l-with'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(note, "# Hello");
+        let stored: String = conn
+            .query_row(
+                "SELECT stored_path FROM material_files WHERE id = 'f1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, "l-with/uuid.pdf");
+        let url: String = conn
+            .query_row(
+                "SELECT url FROM material_links WHERE id = 'k1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(url, "https://x.test");
+
+        // Old tables are gone.
+        let legacy: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE name IN ('lecture_notes','lecture_files','lecture_links')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(legacy, 0);
+
+        // FK consistency holds once enforcement is back on.
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        let bad: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(bad, 0);
     }
 
     /// Migration 015 rebuilds lectures/enrollments with per-section uniqueness:
