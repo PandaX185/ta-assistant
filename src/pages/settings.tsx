@@ -797,6 +797,7 @@ function DataSection() {
   const handleBackup = () =>
     run(async () => {
       const path = await saveDialog({
+        defaultPath: `markbook-backup-${new Date().toISOString().slice(0, 10)}.json`,
         filters: [{ name: "Markbook backup", extensions: ["json"] }],
       });
       if (!path) return;
