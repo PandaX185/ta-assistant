@@ -1,0 +1,15 @@
+[package]
+name = "tauri-plugin-saf-io"
+version = "0.1.0"
+description = "Read/write Android SAF content:// URIs via ContentResolver streams."
+edition = "2021"
+license = "MIT OR Apache-2.0"
+links = "tauri-plugin-saf-io"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = "2"
+base64 = "0.22"
