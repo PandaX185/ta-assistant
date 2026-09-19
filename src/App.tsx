@@ -18,6 +18,8 @@ import Students from "@/pages/students";
 import Grades from "@/pages/grades";
 import Attendance from "@/pages/attendance";
 import Lecture from "@/pages/lecture";
+import Materials from "@/pages/materials";
+import MaterialsDetail from "@/pages/materials-detail";
 import Settings from "@/pages/settings";
 
 function AppContent() {
@@ -44,6 +46,8 @@ function AppContent() {
           <Route path="grades" element={<Grades />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="lectures/:id" element={<Lecture />} />
+          <Route path="materials" element={<Materials />} />
+          <Route path="materials/:id" element={<MaterialsDetail />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

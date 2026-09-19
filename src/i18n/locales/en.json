@@ -76,7 +76,31 @@
     "students": "Students",
     "grades": "Grades",
     "attendance": "Attendance",
+    "materials": "Materials",
     "settings": "Settings"
+  },
+  "materials": {
+    "title": "Materials",
+    "description": "Notes, files and links organized per lecture, per subject.",
+    "no_subject": "Select a subject (top bar) to see its materials.",
+    "no_subject_lectures": "No lecture entries yet for this subject.",
+    "add_lecture": "+ Add lecture",
+    "new_lecture": "New lecture entry",
+    "lecture_title": "Title",
+    "lecture_title_placeholder": "e.g. Week 3 — sorting algorithms",
+    "date_optional": "Date (optional)",
+    "create": "Create",
+    "update": "Update",
+    "rename": "Rename lecture",
+    "delete_lecture": "Delete",
+    "delete_confirm": "Deleting this lecture entry removes its notes, files and links. Continue?",
+    "files_count": "{{count}} files",
+    "links_count": "{{count}} links",
+    "note": "Note",
+    "open": "Open",
+    "back": "Back to Materials",
+    "loading": "Loading…",
+    "not_found": "Lecture entry not found."
   },
   "topbar": {
     "app_title": "xLa",
@@ -193,7 +217,8 @@
     "delete_link_confirm": "Remove this link?",
     "loading": "Loading…",
     "not_found": "Lecture not found.",
-    "invalid_url": "URL must start with http:// or https://"
+    "invalid_url": "URL must start with http:// or https://",
+    "open_materials": "Open materials"
   },
   "settings": {
     "title": "Settings",
@@ -275,6 +300,7 @@
     "students_desc": "Manage students, enroll them in subjects and sections, and reuse existing students instead of duplicating them.",
     "grades_desc": "Record quiz and assignment grades for each section.",
     "attendance_desc": "Mark attendance lecture by lecture, with a history per section.",
+    "materials_desc": "Keep notes, files and links per lecture for each subject — independent of attendance.",
     "settings_desc": "Manage semesters, subjects and sections, plus language, theme and your password.",
     "skip": "Skip",
     "back": "Back",

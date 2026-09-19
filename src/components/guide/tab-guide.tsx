@@ -6,7 +6,7 @@ import { navItems } from "@/components/layout/nav-items";
 import { cn } from "@/lib/utils";
 
 /** Keys used for per-tab descriptions — order matches navItems. */
-const TAB_KEYS = ["dashboard", "students", "grades", "attendance", "settings"] as const;
+const TAB_KEYS = ["dashboard", "students", "grades", "attendance", "materials", "settings"] as const;
 
 interface Props {
   open: boolean;
@@ -14,7 +14,7 @@ interface Props {
 }
 
 /**
- * First-launch guide: an overlay that walks through the 5 main tabs.
+ * First-launch guide: an overlay that walks through the main tabs.
  * Intro card + one card per tab. Localized via i18n (ar/en), RTL-safe,
  * and responsive by design (fixed overlay, centered max-w-md card).
  */
