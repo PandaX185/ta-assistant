@@ -16,9 +16,11 @@
 //! in-memory database (schema + foreign-key consistency), then applied to the
 //! real database inside a single transaction that rolls back on any failure.
 //!
-//! Note: paths must be real filesystem paths (what the desktop save/open
-//! dialogs return). Android SAF `content://` URIs are not readable via
-//! `std::fs` and will fail with the OS error surfaced in the message.
+//! Note on paths: they may be real filesystem paths or Android SAF
+//! `content://` URIs (what the dialog plugin returns on each platform); SAF
+//! I/O routes through the local `saf-io` plugin because the fs plugin's
+//! content-URI write path is broken upstream (0-byte metadata,
+//! tauri-apps/plugins-workspace#3356).
 
 use crate::commands::students::{create_enrollment_impl, create_student_impl, delete_student_impl};
 use rusqlite::types::ValueRef;
@@ -429,6 +431,55 @@ fn write_utf8(path: &Path, contents: &str) -> Result<(), String> {
         .map_err(|e| format!("Write {} failed: {e}", path.display()))
 }
 
+// ---------------------------------------------------------------------------
+// User-picked I/O (filesystem paths or Android SAF content:// URIs)
+// ---------------------------------------------------------------------------
+
+const CONTENT_SCHEME: &str = "content://";
+
+fn is_content_uri(path: &str) -> bool {
+    path.starts_with(CONTENT_SCHEME)
+}
+
+/// Read any user-picked input: Android SAF document or filesystem path.
+fn read_input(app: &AppHandle, path: &str) -> Result<Vec<u8>, String> {
+    if is_content_uri(path) {
+        use tauri_plugin_saf_io::SafIoExt;
+        app.saf_io()
+            .read(path.to_string())
+            .map_err(|e| format!("Read failed: {e}"))
+    } else {
+        std::fs::read(path).map_err(|e| format!("Read {path:?} failed: {e}"))
+    }
+}
+
+/// Write to any user-picked destination. SAF documents must be written
+/// through the saf-io plugin (fs-plugin writes leave 0-byte metadata);
+/// filesystem paths keep create-parents + plain write.
+fn write_output(app: &AppHandle, path: &str, bytes: &[u8]) -> Result<(), String> {
+    if is_content_uri(path) {
+        use tauri_plugin_saf_io::SafIoExt;
+        app.saf_io()
+            .write(path.to_string(), bytes)
+            .map_err(|e| format!("Write failed: {e}"))
+    } else {
+        let p = Path::new(path);
+        if let Some(parent) = p.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    format!("Create directory {} failed: {e}", parent.display())
+                })?;
+            }
+        }
+        std::fs::write(p, bytes).map_err(|e| format!("Write {path:?} failed: {e}"))
+    }
+}
+
+fn read_input_string(app: &AppHandle, path: &str) -> Result<String, String> {
+    let bytes = read_input(app, path)?;
+    String::from_utf8(bytes).map_err(|_| "File is not valid UTF-8".to_string())
+}
+
 /// Export the student roster of one section as a CSV file the user picked.
 /// Returns the path that was written so the webview can confirm.
 #[tauri::command]
@@ -445,9 +496,8 @@ pub fn export_students_csv(
     let mut out = vec![roster_header()];
     out.extend(section_enrollments(&conn, &section_id)?);
     let csv = to_csv(&out);
-    let path = PathBuf::from(&file_path);
-    write_utf8(&path, &csv)?;
-    Ok(path.display().to_string())
+    write_output(&app, &file_path, csv.as_bytes())?;
+    Ok(file_path)
 }
 
 /// Import a roster CSV into one section. Student matching priority is
@@ -464,8 +514,7 @@ pub fn import_students_csv(
     let conn = crate::db::open_db(&app)?;
     ensure_section_scoped(&conn, &semester_year_id, &subject_id, &section_id)?;
 
-    let text = std::fs::read_to_string(&file_path)
-        .map_err(|e| format!("Read {file_path:?} failed: {e}"))?;
+    let text = read_input_string(&app, &file_path)?;
     import_csv_impl(&conn, &text, &semester_year_id, &subject_id, &section_id)
 }
 
@@ -708,7 +757,7 @@ pub fn export_grades_report_csv(
     let mut out = vec![head];
     out.extend(body);
     let csv = to_csv(&out);
-    write_utf8(Path::new(&file_path), &csv)?;
+    write_output(&app, &file_path, csv.as_bytes())?;
     Ok(file_path)
 }
 
@@ -719,16 +768,13 @@ pub fn export_grades_report_csv(
 /// Write text to a user-picked path (from the dialog plugin's save dialog).
 /// Returns the path that was written.
 #[tauri::command]
-pub fn save_text_file(file_path: String, contents: String) -> Result<String, String> {
-    let path = PathBuf::from(&file_path);
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Create directory {} failed: {e}", parent.display()))?;
-        }
-    }
-    write_utf8(&path, &contents)?;
-    Ok(path.display().to_string())
+pub fn save_text_file(
+    app: AppHandle,
+    file_path: String,
+    contents: String,
+) -> Result<String, String> {
+    write_output(&app, &file_path, contents.as_bytes())?;
+    Ok(file_path)
 }
 
 // ---------------------------------------------------------------------------
@@ -873,28 +919,12 @@ fn read_migration_versions(conn: &Connection) -> Result<Vec<i64>, String> {
         .map_err(|e| format!("Failed to read applied migrations: {e}"))
 }
 
-/// Serialize + write a backup atomically (temp file, verify it parses back,
-/// then rename over the target) so a crash mid-write can't destroy an
-/// existing backup file.
-fn backup_impl(conn: &Connection, file_path: &str) -> Result<String, String> {
+/// Serialize the whole user-data schema to a backup JSON document. The
+/// caller verifies it parses back before writing anything anywhere.
+fn backup_impl(conn: &Connection) -> Result<String, String> {
     let payload = backup_payload(conn)?;
-    let json = serde_json::to_string_pretty(&payload)
-        .map_err(|e| format!("Backup serialization failed: {e}"))?;
-    // Cheap insurance that what we just wrote is a valid backup.
-    parse_backup(&json)?;
-
-    let path = PathBuf::from(file_path);
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Create directory {} failed: {e}", parent.display()))?;
-        }
-    }
-    let tmp = path.with_extension("json.tmp");
-    write_utf8(&tmp, &json)?;
-    std::fs::rename(&tmp, &path)
-        .map_err(|e| format!("Write {} failed: {e}", path.display()))?;
-    Ok(path.display().to_string())
+    serde_json::to_string_pretty(&payload)
+        .map_err(|e| format!("Backup serialization failed: {e}"))
 }
 
 fn sql_quote(s: &str) -> String {
@@ -1069,12 +1099,34 @@ fn apply_restore(
     })
 }
 
-/// Create a full backup of all user data at `file_path` (JSON). Returns the
-/// written path.
+/// Create a full backup of all user data at `file_path` (JSON, or a SAF
+/// document URI on Android). Returns the written path.
 #[tauri::command]
 pub fn backup_app_data(app: AppHandle, file_path: String) -> Result<String, String> {
     let conn = crate::db::open_db(&app)?;
-    backup_impl(&conn, &file_path)
+    let json = backup_impl(&conn)?;
+    // Cheap insurance that what we are about to write is a valid backup.
+    parse_backup(&json)?;
+    if is_content_uri(&file_path) {
+        // SAF documents cannot be renamed into place — write directly.
+        write_output(&app, &file_path, json.as_bytes())?;
+    } else {
+        // Desktop: atomic temp-file + rename so a crash mid-write can't
+        // destroy an existing backup file.
+        let path = PathBuf::from(&file_path);
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    format!("Create directory {} failed: {e}", parent.display())
+                })?;
+            }
+        }
+        let tmp = path.with_extension("json.tmp");
+        write_utf8(&tmp, &json)?;
+        std::fs::rename(&tmp, &path)
+            .map_err(|e| format!("Write {file_path:?} failed: {e}"))?;
+    }
+    Ok(file_path)
 }
 
 /// Restore all user data from a backup file. Replaces every user-data table
@@ -1082,8 +1134,7 @@ pub fn backup_app_data(app: AppHandle, file_path: String) -> Result<String, Stri
 #[tauri::command]
 pub fn restore_app_data(app: AppHandle, file_path: String) -> Result<RestoreSummary, String> {
     let conn = crate::db::open_db(&app)?;
-    let text = std::fs::read_to_string(&file_path)
-        .map_err(|e| format!("Read {file_path:?} failed: {e}"))?;
+    let text = read_input_string(&app, &file_path)?;
     let payload = parse_backup(&text)?;
     restore_impl(&conn, &payload)
 }
@@ -1336,8 +1387,9 @@ mod tests {
         seed_rich_data(&conn);
         let (file, dir) = temp_backup("roundtrip");
 
-        let written = backup_impl(&conn, file.to_str().unwrap()).unwrap();
-        assert_eq!(written, file.to_str().unwrap());
+        let written = backup_impl(&conn).unwrap();
+        parse_backup(&written).unwrap();
+        std::fs::write(&file, &written).unwrap();
 
         // Simulate data loss.
         conn.execute("DELETE FROM students", []).unwrap();
@@ -1373,7 +1425,8 @@ mod tests {
         let source = test_utils::test_conn();
         seed_rich_data(&source);
         let (file, dir) = temp_backup("fresh");
-        backup_impl(&source, file.to_str().unwrap()).unwrap();
+        let json = backup_impl(&source).unwrap();
+        std::fs::write(&file, &json).unwrap();
         let payload = parse_backup(&std::fs::read_to_string(&file).unwrap()).unwrap();
 
         let fresh = test_utils::test_conn();
