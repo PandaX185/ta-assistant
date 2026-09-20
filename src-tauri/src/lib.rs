@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 
+#[cfg(desktop)]
 use tauri::Emitter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -37,11 +38,11 @@ pub fn run() {
     );
 
     builder
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(desktop)]
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                app.global_shortcut().register("Ctrl+Shift+P")?;
+                _app.global_shortcut().register("Ctrl+Shift+P")?;
             }
             Ok(())
         })
