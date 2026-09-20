@@ -1313,7 +1313,11 @@ mod tests {
         )
         .unwrap();
         let lid: String = conn
-            .query_row("SELECT id FROM lectures WHERE date = '2026-02-01'", [], |r| r.get(0))
+            .query_row(
+                "SELECT id FROM lectures WHERE date = '2026-02-01'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert!(save_note_impl(&conn, &lid, "x").is_err());
         assert!(add_link_impl(&conn, &lid, "L", "https://x.test").is_err());
@@ -1338,9 +1342,16 @@ mod tests {
         )
         .unwrap();
         let lid: String = conn
-            .query_row("SELECT id FROM lectures WHERE date = '2026-02-01'", [], |r| r.get(0))
+            .query_row(
+                "SELECT id FROM lectures WHERE date = '2026-02-01'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
-        assert!(get_lecture_impl(&conn, &lid).unwrap().subject_lecture_id.is_none());
+        assert!(get_lecture_impl(&conn, &lid)
+            .unwrap()
+            .subject_lecture_id
+            .is_none());
 
         // Migration 020 links the two by REUSING the lecture id — simulate it.
         conn.execute(
@@ -1350,7 +1361,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            get_lecture_impl(&conn, &lid).unwrap().subject_lecture_id.as_deref(),
+            get_lecture_impl(&conn, &lid)
+                .unwrap()
+                .subject_lecture_id
+                .as_deref(),
             Some(lid.as_str())
         );
     }

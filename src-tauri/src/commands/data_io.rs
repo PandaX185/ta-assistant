@@ -106,7 +106,12 @@ fn csv_field(s: &str) -> String {
 fn to_csv(rows: &[Vec<String>]) -> String {
     let mut out = String::new();
     for row in rows {
-        out.push_str(&row.iter().map(|f| csv_field(f)).collect::<Vec<_>>().join(","));
+        out.push_str(
+            &row.iter()
+                .map(|f| csv_field(f))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
         out.push('\n');
     }
     out
@@ -178,8 +183,14 @@ fn find_by_key(conn: &Connection, column: &str, value: Option<&str>) -> Result<M
     let mut rows = stmt
         .query_map(params![value], |row| row.get::<_, String>(0))
         .map_err(|e| format!("match query failed: {e}"))?;
-    let first = rows.next().transpose().map_err(|e| format!("match row failed: {e}"))?;
-    let second = rows.next().transpose().map_err(|e| format!("match row failed: {e}"))?;
+    let first = rows
+        .next()
+        .transpose()
+        .map_err(|e| format!("match row failed: {e}"))?;
+    let second = rows
+        .next()
+        .transpose()
+        .map_err(|e| format!("match row failed: {e}"))?;
     match (first, second) {
         (Some(id), None) => Ok(Matched::Student(id)),
         (Some(_), Some(_)) => Ok(Matched::Ambiguous(value.to_string())),
@@ -256,9 +267,9 @@ fn import_one(
     let (id, created) = match matched {
         Matched::Student(id) => (id, false),
         Matched::Ambiguous(key) => {
-            report
-                .skipped
-                .push(format!("Row {row_no}: {name} matches multiple students ({key})"));
+            report.skipped.push(format!(
+                "Row {row_no}: {name} matches multiple students ({key})"
+            ));
             return;
         }
         Matched::NoMatch => match create_student_impl(conn, name.clone(), email, student_id, phone)
@@ -273,9 +284,9 @@ fn import_one(
 
     match already_enrolled(conn, &id, semester_year_id, subject_id) {
         Ok(true) => {
-            report
-                .skipped
-                .push(format!("Row {row_no}: {name} is already enrolled in this subject"));
+            report.skipped.push(format!(
+                "Row {row_no}: {name} is already enrolled in this subject"
+            ));
             return;
         }
         Ok(false) => {}
@@ -466,9 +477,8 @@ fn write_output(app: &AppHandle, path: &str, bytes: &[u8]) -> Result<(), String>
         let p = Path::new(path);
         if let Some(parent) = p.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    format!("Create directory {} failed: {e}", parent.display())
-                })?;
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Create directory {} failed: {e}", parent.display()))?;
             }
         }
         std::fs::write(p, bytes).map_err(|e| format!("Write {path:?} failed: {e}"))
@@ -717,7 +727,12 @@ fn grades_report(
             e.phone.clone().unwrap_or_default(),
         ];
         for (name, _) in &quiz_cols {
-            row.push(score_cell(graded_score(conn, &e.enrollment_id, name, "quizzes")?));
+            row.push(score_cell(graded_score(
+                conn,
+                &e.enrollment_id,
+                name,
+                "quizzes",
+            )?));
         }
         for (name, _) in &assign_cols {
             row.push(score_cell(graded_score(
@@ -886,9 +901,7 @@ fn backup_payload(conn: &Connection) -> Result<BackupPayload, String> {
                 let vr = row
                     .get_ref(i)
                     .map_err(|e| format!("Backup read {table} failed: {e}"))?;
-                out_row.push(
-                    cell_to_json(vr).map_err(|e| format!("Backup {table}: {e}"))?,
-                );
+                out_row.push(cell_to_json(vr).map_err(|e| format!("Backup {table}: {e}"))?);
             }
             rows.push(out_row);
         }
@@ -924,8 +937,7 @@ fn read_migration_versions(conn: &Connection) -> Result<Vec<i64>, String> {
 /// caller verifies it parses back before writing anything anywhere.
 fn backup_impl(conn: &Connection) -> Result<String, String> {
     let payload = backup_payload(conn)?;
-    serde_json::to_string_pretty(&payload)
-        .map_err(|e| format!("Backup serialization failed: {e}"))
+    serde_json::to_string_pretty(&payload).map_err(|e| format!("Backup serialization failed: {e}"))
 }
 
 fn sql_quote(s: &str) -> String {
@@ -1023,7 +1035,9 @@ fn restore_impl(conn: &Connection, payload: &BackupPayload) -> Result<RestoreSum
             .map_err(|e| format!("Backup data rejected: {e}"))?;
     }
     let violations: i64 = probe
-        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+            r.get(0)
+        })
         .map_err(|e| format!("Validation check failed: {e}"))?;
     if violations > 0 {
         return Err(format!(
@@ -1081,11 +1095,9 @@ fn apply_restore(
 
     // Last gate before anything is committed.
     let violations: i64 = tx
-        .query_row(
-            "SELECT COUNT(*) FROM pragma_foreign_key_check",
-            [],
-            |r| r.get(0),
-        )
+        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+            r.get(0)
+        })
         .map_err(|e| format!("Restore check failed: {e}"))?;
     if violations > 0 {
         return Err(format!(
@@ -1093,7 +1105,8 @@ fn apply_restore(
         ));
     }
 
-    tx.commit().map_err(|e| format!("Commit restore failed: {e}"))?;
+    tx.commit()
+        .map_err(|e| format!("Commit restore failed: {e}"))?;
     Ok(RestoreSummary {
         tables_restored: payload.tables.len(),
         rows_restored: restore_sql.len(),
@@ -1117,15 +1130,13 @@ pub fn backup_app_data(app: AppHandle, file_path: String) -> Result<String, Stri
         let path = PathBuf::from(&file_path);
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    format!("Create directory {} failed: {e}", parent.display())
-                })?;
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Create directory {} failed: {e}", parent.display()))?;
             }
         }
         let tmp = path.with_extension("json.tmp");
         write_utf8(&tmp, &json)?;
-        std::fs::rename(&tmp, &path)
-            .map_err(|e| format!("Write {file_path:?} failed: {e}"))?;
+        std::fs::rename(&tmp, &path).map_err(|e| format!("Write {file_path:?} failed: {e}"))?;
     }
     Ok(file_path)
 }
@@ -1151,10 +1162,8 @@ mod tests {
 
     /// Fresh temp path for a backup file; returns (file, dir-for-cleanup).
     fn temp_backup(tag: &str) -> (PathBuf, PathBuf) {
-        let dir = std::env::temp_dir().join(format!(
-            "markbook-test-{tag}-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("markbook-test-{tag}-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("create temp dir");
         (dir.join("backup.json"), dir)
     }
@@ -1191,7 +1200,10 @@ mod tests {
         assert!(report.errors.is_empty());
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM students"), 4);
         assert_eq!(
-            count(&conn, "SELECT COUNT(*) FROM enrollments WHERE section_id = 'sec-1'"),
+            count(
+                &conn,
+                "SELECT COUNT(*) FROM enrollments WHERE section_id = 'sec-1'"
+            ),
             4
         );
     }
@@ -1221,27 +1233,18 @@ mod tests {
     fn import_ambiguous_name_is_skipped_and_others_continue() {
         let conn = test_utils::test_conn();
         let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
-        crate::commands::students::create_student_impl(
-            &conn,
-            "Sara".into(),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        crate::commands::students::create_student_impl(
-            &conn,
-            "Sara".into(),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        crate::commands::students::create_student_impl(&conn, "Sara".into(), None, None, None)
+            .unwrap();
+        crate::commands::students::create_student_impl(&conn, "Sara".into(), None, None, None)
+            .unwrap();
         let csv = "name,id,email,phone\nSara,,,\nUnique Person,77,,\n";
         let report = import_csv_impl(&conn, csv, &sy, &sub, "sec-1").unwrap();
         assert_eq!(report.created, 1);
         assert_eq!(report.skipped.len(), 1);
-        assert!(report.skipped[0].contains("multiple students"), "{report:?}");
+        assert!(
+            report.skipped[0].contains("multiple students"),
+            "{report:?}"
+        );
     }
 
     #[test]
@@ -1416,7 +1419,9 @@ mod tests {
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM subject_lectures"), 1);
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM material_notes"), 1);
         let score: f64 = conn
-            .query_row("SELECT score FROM quizzes WHERE id = 'q1'", [], |r| r.get(0))
+            .query_row("SELECT score FROM quizzes WHERE id = 'q1'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(score, 8.5);
         // Connection state must be as it was before (FK back on).
@@ -1540,11 +1545,11 @@ mod tests {
     #[test]
     fn insert_sql_quotes_and_renders_values() {
         let cols = vec!["id".to_string(), "name".to_string()];
-        let row = vec![
-            JsonValue::String("o'brien".into()),
-            JsonValue::Null,
-        ];
+        let row = vec![JsonValue::String("o'brien".into()), JsonValue::Null];
         let sql = insert_sql("students", &cols, &row).unwrap();
-        assert_eq!(sql, "INSERT INTO students (id, name) VALUES ('o''brien', NULL);");
+        assert_eq!(
+            sql,
+            "INSERT INTO students (id, name) VALUES ('o''brien', NULL);"
+        );
     }
 }

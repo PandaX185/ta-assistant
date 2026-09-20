@@ -377,7 +377,10 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(bare, 0, "attendance lecture without materials is not copied");
+        assert_eq!(
+            bare, 0,
+            "attendance lecture without materials is not copied"
+        );
 
         // Material rows re-parented, ids and disk paths preserved.
         let note: String = conn
@@ -397,11 +400,9 @@ mod tests {
             .unwrap();
         assert_eq!(stored, "l-with/uuid.pdf");
         let url: String = conn
-            .query_row(
-                "SELECT url FROM material_links WHERE id = 'k1'",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT url FROM material_links WHERE id = 'k1'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(url, "https://x.test");
 
@@ -419,7 +420,9 @@ mod tests {
         // FK consistency holds once enforcement is back on.
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
         let bad: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(bad, 0);
     }
