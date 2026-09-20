@@ -1293,8 +1293,9 @@ mod tests {
         update_subject_lecture_impl(&conn, &sl, "Week 1 — intro", None).unwrap();
         assert!(update_subject_lecture_impl(&conn, "nope", "x", None).is_err());
         let list = get_subject_lectures_impl(&conn, &sub).unwrap();
-        assert_eq!(list[0].title, "Week 1 — intro");
-        assert_eq!(list[0].date, None);
+        let by_id = |id: &str| list.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(by_id(&sl).title, "Week 1 — intro");
+        assert_eq!(by_id(&sl).date, None);
     }
 
     #[test]
