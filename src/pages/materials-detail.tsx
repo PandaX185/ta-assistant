@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -73,7 +74,7 @@ function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB"];
   const i = Math.min(
     Math.floor(Math.log(bytes) / Math.log(1024)),
-    units.length - 1,
+    units.length - 1
   );
   const value = bytes / 1024 ** i;
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
@@ -99,6 +100,7 @@ export default function MaterialsDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
   const state = (location.state ?? {}) as LocationState;
 
   const [bundle, setBundle] = useState<MaterialsBundle | null>(null);
@@ -176,13 +178,16 @@ export default function MaterialsDetail() {
   };
 
   const handleDeleteFile = async (file: FileInfo) => {
-    if (!window.confirm(t("lecture.delete_file_confirm"))) return;
+    const ok = await confirmDialog({
+      message: t("lecture.delete_file_confirm"),
+    });
+    if (!ok) return;
     try {
       await invoke("delete_file", { fileId: file.id });
       setBundle((prev) =>
         prev
           ? { ...prev, files: prev.files.filter((f) => f.id !== file.id) }
-          : prev,
+          : prev
       );
     } catch (e) {
       window.alert(String(e));
@@ -210,7 +215,7 @@ export default function MaterialsDetail() {
         url: linkDraft.url.trim(),
       });
       setBundle((prev) =>
-        prev ? { ...prev, links: [...prev.links, link] } : prev,
+        prev ? { ...prev, links: [...prev.links, link] } : prev
       );
       setLinkDraft({ title: "", url: "" });
     } catch (e) {
@@ -246,10 +251,10 @@ export default function MaterialsDetail() {
                       title: editingLink.title.trim(),
                       url: editingLink.url.trim(),
                     }
-                  : l,
+                  : l
               ),
             }
-          : prev,
+          : prev
       );
       setEditingLinkId(null);
     } catch (e) {
@@ -258,13 +263,16 @@ export default function MaterialsDetail() {
   };
 
   const handleDeleteLink = async (link: LinkInfo) => {
-    if (!window.confirm(t("lecture.delete_link_confirm"))) return;
+    const ok = await confirmDialog({
+      message: t("lecture.delete_link_confirm"),
+    });
+    if (!ok) return;
     try {
       await invoke("delete_link", { linkId: link.id });
       setBundle((prev) =>
         prev
           ? { ...prev, links: prev.links.filter((l) => l.id !== link.id) }
-          : prev,
+          : prev
       );
     } catch (e) {
       window.alert(String(e));
@@ -273,7 +281,8 @@ export default function MaterialsDetail() {
 
   const handleDeleteLecture = async () => {
     if (!id) return;
-    if (!window.confirm(t("materials.delete_confirm"))) return;
+    const ok = await confirmDialog({ message: t("materials.delete_confirm") });
+    if (!ok) return;
     try {
       await invoke("delete_subject_lecture", { id });
       navigate("/materials");
@@ -296,7 +305,11 @@ export default function MaterialsDetail() {
         <p className="text-sm text-destructive">
           {loadError ?? t("materials.not_found")}
         </p>
-        <Button variant="outline" size="sm" onClick={() => navigate("/materials")}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate("/materials")}
+        >
           <ArrowLeft className="h-4 w-4 mr-1" />
           {t("materials.back")}
         </Button>
@@ -319,7 +332,9 @@ export default function MaterialsDetail() {
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("materials.back")}
           </Button>
-          <h1 className="text-2xl font-bold">{state.title ?? t("materials.title")}</h1>
+          <h1 className="text-2xl font-bold">
+            {state.title ?? t("materials.title")}
+          </h1>
           {state.date && (
             <p className="text-sm text-muted-foreground">{state.date}</p>
           )}
@@ -382,15 +397,15 @@ export default function MaterialsDetail() {
               dir="auto"
             />
           ) : note && note.content_md.trim() ? (
-            <div
-              className="max-w-none text-sm leading-relaxed space-y-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_a]:text-blue-600 [&_a]:underline [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:overflow-x-auto [&_blockquote]:border-l-2 [&_blockquote]:border-muted [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground"
-            >
+            <div className="max-w-none text-sm leading-relaxed space-y-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_a]:text-blue-600 [&_a]:underline [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:overflow-x-auto [&_blockquote]:border-l-2 [&_blockquote]:border-muted [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {note.content_md}
               </ReactMarkdown>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{t("lecture.no_notes")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("lecture.no_notes")}
+            </p>
           )}
         </CardContent>
       </Card>
@@ -406,7 +421,9 @@ export default function MaterialsDetail() {
         </CardHeader>
         <CardContent>
           {bundle.files.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("lecture.no_files")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("lecture.no_files")}
+            </p>
           ) : (
             <div className="divide-y rounded-lg border">
               {bundle.files.map((file) => (
@@ -416,9 +433,12 @@ export default function MaterialsDetail() {
                 >
                   <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{file.file_name}</p>
+                    <p className="truncate text-sm font-medium">
+                      {file.file_name}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatBytes(file.file_size)} · {formatTime(file.created_at)}
+                      {formatBytes(file.file_size)} ·{" "}
+                      {formatTime(file.created_at)}
                     </p>
                   </div>
                   <Button
@@ -506,7 +526,10 @@ export default function MaterialsDetail() {
                         aria-label={t("lecture.link_title")}
                         value={editingLink.title}
                         onChange={(e) =>
-                          setEditingLink((d) => ({ ...d, title: e.target.value }))
+                          setEditingLink((d) => ({
+                            ...d,
+                            title: e.target.value,
+                          }))
                         }
                       />
                       <Input
@@ -537,7 +560,10 @@ export default function MaterialsDetail() {
                         <p className="truncate text-sm font-medium">
                           {link.title}
                         </p>
-                        <p className="truncate text-xs text-muted-foreground" dir="ltr">
+                        <p
+                          className="truncate text-xs text-muted-foreground"
+                          dir="ltr"
+                        >
                           {link.url}
                         </p>
                       </div>
@@ -572,6 +598,7 @@ export default function MaterialsDetail() {
           )}
         </CardContent>
       </Card>
+      {confirmDialogElement}
     </div>
   );
 }

@@ -7,7 +7,10 @@ import {
   install,
   requestInstallPermission,
 } from "tauri-plugin-android-installer-api";
-import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import {
+  open as openDialog,
+  save as saveDialog,
+} from "@tauri-apps/plugin-dialog";
 import { useFilterStore } from "@/stores/filter-store";
 import Settings from "./settings";
 
@@ -28,9 +31,7 @@ const semesterYears = [
   { id: "sy-1", year: 2026, semester: "Fall" },
   { id: "sy-2", year: 2026, semester: "Summer" },
 ];
-const subjects = [
-  { id: "sub-1", name: "Databases", code: "DB", color: null },
-];
+const subjects = [{ id: "sub-1", name: "Databases", code: "DB", color: null }];
 const sections = [
   {
     id: "sec-1",
@@ -48,7 +49,6 @@ beforeEach(() => {
   vi.mocked(requestInstallPermission).mockReset();
   vi.mocked(openDialog).mockReset();
   vi.mocked(saveDialog).mockReset();
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   useFilterStore.setState({
     semesterYears,
     subjects: [],
@@ -69,7 +69,7 @@ function mockInvoke() {
       return Promise.resolve(
         args?.semesterYearId === "sy-1" && args?.subjectId === "sub-1"
           ? sections
-          : [],
+          : []
       );
     return Promise.resolve(undefined);
   });
@@ -91,19 +91,19 @@ describe("Settings", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("get_subjects", {
         semesterYearId: "sy-1",
-      }),
+      })
     );
 
     // Pick the subject → its sections load.
     await user.click(screen.getAllByRole("combobox")[1]);
     await user.click(
-      await screen.findByRole("option", { name: "[DB] Databases" }),
+      await screen.findByRole("option", { name: "[DB] Databases" })
     );
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("get_sections", {
         semesterYearId: "sy-1",
         subjectId: "sub-1",
-      }),
+      })
     );
     expect(screen.getByText("Group A")).toBeInTheDocument();
 
@@ -117,7 +117,7 @@ describe("Settings", () => {
         subjectId: "sub-1",
         name: "Group B",
         color: null,
-      }),
+      })
     );
 
     // Rename Group A.
@@ -130,15 +130,15 @@ describe("Settings", () => {
       expect(invoke).toHaveBeenCalledWith("rename_section", {
         id: "sec-1",
         name: "Alpha",
-      }),
+      })
     );
 
     // Delete with confirmation.
     await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(await screen.findByRole("button", { name: "Confirm" }));
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("delete_section", { id: "sec-1" }),
+      expect(invoke).toHaveBeenCalledWith("delete_section", { id: "sec-1" })
     );
-    expect(window.confirm).toHaveBeenCalled();
   });
 
   it("shows a scoped subject list and creates subjects in the chosen semester", async () => {
@@ -149,15 +149,19 @@ describe("Settings", () => {
     await openTab(user, "Subjects");
 
     // Default semester sy-1 shows its subject.
-    await waitFor(() => expect(screen.getByText("Databases")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Databases")).toBeInTheDocument()
+    );
 
     // Switch semester → empty state for that semester.
     await user.click(screen.getAllByRole("combobox")[0]);
-    await user.click(await screen.findByRole("option", { name: "2026 Summer" }));
+    await user.click(
+      await screen.findByRole("option", { name: "2026 Summer" })
+    );
     await waitFor(() =>
       expect(
-        screen.getByText("No subjects yet for this semester."),
-      ).toBeInTheDocument(),
+        screen.getByText("No subjects yet for this semester.")
+      ).toBeInTheDocument()
     );
 
     // Create a subject in the Summer semester.
@@ -170,7 +174,7 @@ describe("Settings", () => {
         name: "OS",
         code: null,
         color: null,
-      }),
+      })
     );
   });
 
@@ -182,10 +186,10 @@ describe("Settings", () => {
     await openTab(user, "Sections");
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "+ Add" })).toBeDisabled(),
+      expect(screen.getByRole("button", { name: "+ Add" })).toBeDisabled()
     );
     expect(
-      screen.getByText("Select a semester and subject to see its sections."),
+      screen.getByText("Select a semester and subject to see its sections.")
     ).toBeInTheDocument();
   });
 
@@ -208,9 +212,7 @@ describe("Settings", () => {
     render(<Settings />);
 
     await user.click(screen.getByRole("button", { name: "Check for updates" }));
-    expect(
-      await screen.findByText(/You're up to date/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/You're up to date/)).toBeInTheDocument();
   });
 
   it("offers an update and hands the installer to the OS on desktop", async () => {
@@ -222,7 +224,8 @@ describe("Settings", () => {
           update_available: true,
           release_notes: "Fixed stuff",
           published_at: "2026-09-01T00:00:00Z",
-          download_url: "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
+          download_url:
+            "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
           asset_name: "app.apk",
           asset_size: 1_000_000,
         });
@@ -232,7 +235,7 @@ describe("Settings", () => {
     });
     vi.mocked(canInstall).mockResolvedValue(false);
     vi.mocked(requestInstallPermission).mockRejectedValue(
-      new Error("only supported on Android"),
+      new Error("only supported on Android")
     );
     vi.mocked(install).mockResolvedValue(undefined);
 
@@ -241,22 +244,24 @@ describe("Settings", () => {
 
     await user.click(screen.getByRole("button", { name: "Check for updates" }));
     expect(
-      await screen.findByRole("heading", { name: "Version 0.4.0 is available" }),
+      await screen.findByRole("heading", { name: "Version 0.4.0 is available" })
     ).toBeInTheDocument();
     expect(screen.getByText(/Published/)).toBeInTheDocument();
     expect(screen.getByText(/Fixed stuff/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Download & Install" }));
+    await user.click(
+      screen.getByRole("button", { name: "Download & Install" })
+    );
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("download_update", {
         url: "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
         assetName: "app.apk",
-      }),
+      })
     );
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("open_downloaded", {
         path: "/tmp/ta-assistant/updates/app.apk",
-      }),
+      })
     );
     expect(install).not.toHaveBeenCalled();
   });
@@ -270,12 +275,15 @@ describe("Settings", () => {
           update_available: true,
           release_notes: null,
           published_at: null,
-          download_url: "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
+          download_url:
+            "https://github.com/PandaX185/ta-assistant/releases/download/v0.4.0/app.apk",
           asset_name: "app.apk",
           asset_size: null,
         });
       if (cmd === "download_update")
-        return Promise.resolve("/data/user/0/com.pandax185.taassistant/files/updates/app.apk");
+        return Promise.resolve(
+          "/data/user/0/com.pandax185.taassistant/files/updates/app.apk"
+        );
       return Promise.resolve(undefined);
     });
     vi.mocked(canInstall).mockResolvedValue(true);
@@ -286,16 +294,16 @@ describe("Settings", () => {
 
     await user.click(screen.getByRole("button", { name: "Check for updates" }));
     await user.click(
-      await screen.findByRole("button", { name: "Download & Install" }),
+      await screen.findByRole("button", { name: "Download & Install" })
     );
     await waitFor(() =>
       expect(install).toHaveBeenCalledWith(
-        "/data/user/0/com.pandax185.taassistant/files/updates/app.apk",
-      ),
+        "/data/user/0/com.pandax185.taassistant/files/updates/app.apk"
+      )
     );
     expect(invoke).not.toHaveBeenCalledWith(
       "open_downloaded",
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -307,15 +315,13 @@ describe("Settings", () => {
     await openTab(user, "Data");
 
     expect(
-      await screen.findByText(/Select a semester, subject and section/),
+      await screen.findByText(/Select a semester, subject and section/)
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Export roster (CSV)" }),
+      screen.queryByRole("button", { name: "Export roster (CSV)" })
     ).not.toBeInTheDocument();
     // Import is always available — it only needs the CSV file.
-    expect(
-      screen.getByRole("button", { name: "Choose CSV…" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Choose CSV…" })).toBeEnabled();
   });
 
   it("creates a backup at a user-chosen path", async () => {
@@ -326,13 +332,13 @@ describe("Settings", () => {
 
     await openTab(user, "Data");
     await user.click(
-      await screen.findByRole("button", { name: "Create backup…" }),
+      await screen.findByRole("button", { name: "Create backup…" })
     );
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("backup_app_data", {
         filePath: "/tmp/markbook-backup.json",
-      }),
+      })
     );
     expect(await screen.findByText(/Backup saved:/)).toBeInTheDocument();
   });
@@ -353,17 +359,19 @@ describe("Settings", () => {
 
     await openTab(user, "Data");
     await user.click(
-      await screen.findByRole("button", { name: "Restore from backup…" }),
+      await screen.findByRole("button", { name: "Restore from backup…" })
     );
+
+    // In-app confirmation dialog (replaces window.confirm).
+    await user.click(await screen.findByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("restore_app_data", {
         filePath: "/tmp/markbook-backup.json",
-      }),
+      })
     );
-    expect(window.confirm).toHaveBeenCalled();
     expect(
-      await screen.findByText(/Restored 13 tables \(42 rows\)/),
+      await screen.findByText(/Restored 13 tables \(42 rows\)/)
     ).toBeInTheDocument();
   });
 });

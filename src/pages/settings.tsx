@@ -8,12 +8,20 @@ import {
   install,
   requestInstallPermission,
 } from "tauri-plugin-android-installer-api";
-import { Download, FileDown, FileUp, HelpCircle, RefreshCw, Save } from "lucide-react";
+import {
+  Download,
+  FileDown,
+  FileUp,
+  HelpCircle,
+  RefreshCw,
+  Save,
+} from "lucide-react";
 import {
   open as openDialog,
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,7 +63,10 @@ interface DownloadProgress {
 function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1
+  );
   const value = bytes / 1024 ** i;
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
@@ -77,10 +88,7 @@ function SemesterPicker({
   const { t } = useTranslation();
   const { semesterYears } = useFilterStore();
   return (
-    <Select
-      value={value ?? ""}
-      onValueChange={(v) => onChange(v || null)}
-    >
+    <Select value={value ?? ""} onValueChange={(v) => onChange(v || null)}>
       <SelectTrigger className="w-full sm:w-[220px] h-9 text-sm">
         <SelectValue placeholder={t("common.select_semester")} />
       </SelectTrigger>
@@ -102,7 +110,10 @@ function SemesterPicker({
 
 /// Defaults a local semester picker to the filter bar's selected semester,
 /// falling back to the first one. Re-runs once semesters load.
-function useDefaultSemester(semesterId: string | null, setSemesterId: (id: string) => void) {
+function useDefaultSemester(
+  semesterId: string | null,
+  setSemesterId: (id: string) => void
+) {
   const { semesterYears, selectedSemesterYearId } = useFilterStore();
   useEffect(() => {
     if (!semesterId && semesterYears.length > 0) {
@@ -115,6 +126,7 @@ function useDefaultSemester(semesterId: string | null, setSemesterId: (id: strin
 
 function SemesterYearSection() {
   const { t } = useTranslation();
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
   const { semesterYears, loadData } = useFilterStore();
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState("");
@@ -133,10 +145,10 @@ function SemesterYearSection() {
   };
 
   const handleDelete = async (id: string) => {
-    if (
-      !window.confirm(t("settings.semester_delete_confirm"))
-    )
-      return;
+    const ok = await confirmDialog({
+      message: t("settings.semester_delete_confirm"),
+    });
+    if (!ok) return;
     await invoke("delete_semester_year", { id });
     loadData();
   };
@@ -171,9 +183,15 @@ function SemesterYearSection() {
                     <SelectValue placeholder={t("common.select_semester")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Fall">{t("settings.season_fall")}</SelectItem>
-                    <SelectItem value="Spring">{t("settings.season_spring")}</SelectItem>
-                    <SelectItem value="Summer">{t("settings.season_summer")}</SelectItem>
+                    <SelectItem value="Fall">
+                      {t("settings.season_fall")}
+                    </SelectItem>
+                    <SelectItem value="Spring">
+                      {t("settings.season_spring")}
+                    </SelectItem>
+                    <SelectItem value="Summer">
+                      {t("settings.season_summer")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -192,40 +210,47 @@ function SemesterYearSection() {
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[320px]">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium">{t("common.year")}</th>
-                <th className="text-left px-4 py-2 font-medium">{t("common.semester")}</th>
-                <th className="text-right px-4 py-2 font-medium">{t("common.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {semesterYears.map((sy) => (
-                <tr key={sy.id} className="border-t">
-                  <td className="px-4 py-2">{sy.year}</td>
-                  <td className="px-4 py-2">
-                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">
-                      {localizeSeason(sy.semester)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(sy.id)}
-                    >
-                      {t("common.delete")}
-                    </Button>
-                  </td>
+            <table className="w-full text-sm min-w-[320px]">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("common.year")}
+                  </th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("common.semester")}
+                  </th>
+                  <th className="text-right px-4 py-2 font-medium">
+                    {t("common.actions")}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {semesterYears.map((sy) => (
+                  <tr key={sy.id} className="border-t">
+                    <td className="px-4 py-2">{sy.year}</td>
+                    <td className="px-4 py-2">
+                      <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">
+                        {localizeSeason(sy.semester)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(sy.id)}
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
+      {confirmDialogElement}
     </section>
   );
 }
@@ -234,6 +259,7 @@ function SemesterYearSection() {
 
 function SubjectSection() {
   const { t } = useTranslation();
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
   const { loadSubjects } = useFilterStore();
   const [semesterId, setSemesterId] = useState<string | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -304,10 +330,10 @@ function SubjectSection() {
   };
 
   const handleDelete = async (id: string) => {
-    if (
-      !window.confirm(t("settings.subject_delete_confirm"))
-    )
-      return;
+    const ok = await confirmDialog({
+      message: t("settings.subject_delete_confirm"),
+    });
+    if (!ok) return;
     await invoke("delete_subject", { id });
     if (semesterId) reload(semesterId);
   };
@@ -315,7 +341,9 @@ function SubjectSection() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">{t("settings.heading_subjects")}</h2>
+        <h2 className="text-lg font-semibold">
+          {t("settings.heading_subjects")}
+        </h2>
         <Dialog
           open={open}
           onOpenChange={(v) => {
@@ -328,7 +356,11 @@ function SubjectSection() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingId ? t("settings.edit_subject") : t("settings.new_subject")}</DialogTitle>
+              <DialogTitle>
+                {editingId
+                  ? t("settings.edit_subject")
+                  : t("settings.new_subject")}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
@@ -368,7 +400,9 @@ function SubjectSection() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">{t("common.semester_colon")}</span>
+        <span className="text-sm text-muted-foreground">
+          {t("common.semester_colon")}
+        </span>
         <SemesterPicker value={semesterId} onChange={setSemesterId} />
       </div>
 
@@ -381,55 +415,62 @@ function SubjectSection() {
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[360px]">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium">{t("common.name")}</th>
-                <th className="text-left px-4 py-2 font-medium">{t("common.code")}</th>
-                <th className="text-right px-4 py-2 font-medium">{t("common.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subjects.map((sub) => (
-                <tr key={sub.id} className="border-t">
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      {sub.color && (
-                        <span
-                          className="w-3 h-3 rounded-full inline-block"
-                          style={{ backgroundColor: sub.color }}
-                        />
-                      )}
-                      {sub.name}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                    {sub.code ?? "—"}
-                  </td>
-                  <td className="px-4 py-2 text-right space-x-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEdit(sub)}
-                    >
-                      {t("common.edit")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(sub.id)}
-                    >
-                      {t("common.delete")}
-                    </Button>
-                  </td>
+            <table className="w-full text-sm min-w-[360px]">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("common.name")}
+                  </th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("common.code")}
+                  </th>
+                  <th className="text-right px-4 py-2 font-medium">
+                    {t("common.actions")}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {subjects.map((sub) => (
+                  <tr key={sub.id} className="border-t">
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-2">
+                        {sub.color && (
+                          <span
+                            className="w-3 h-3 rounded-full inline-block"
+                            style={{ backgroundColor: sub.color }}
+                          />
+                        )}
+                        {sub.name}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                      {sub.code ?? "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(sub)}
+                      >
+                        {t("common.edit")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(sub.id)}
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
+      {confirmDialogElement}
     </section>
   );
 }
@@ -438,6 +479,7 @@ function SubjectSection() {
 
 function SectionsSection() {
   const { t } = useTranslation();
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
   const { loadSections } = useFilterStore();
   const [semesterId, setSemesterId] = useState<string | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -516,10 +558,10 @@ function SectionsSection() {
   };
 
   const handleDelete = async (id: string) => {
-    if (
-      !window.confirm(t("settings.section_delete_confirm"))
-    )
-      return;
+    const ok = await confirmDialog({
+      message: t("settings.section_delete_confirm"),
+    });
+    if (!ok) return;
     await invoke("delete_section", { id });
     reloadSections();
   };
@@ -529,7 +571,9 @@ function SectionsSection() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">{t("settings.heading_sections")}</h2>
+        <h2 className="text-lg font-semibold">
+          {t("settings.heading_sections")}
+        </h2>
         <Dialog
           open={open}
           onOpenChange={(v) => {
@@ -578,12 +622,16 @@ function SectionsSection() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">{t("common.semester_colon")}</span>
+        <span className="text-sm text-muted-foreground">
+          {t("common.semester_colon")}
+        </span>
         <SemesterPicker value={semesterId} onChange={setSemesterId} />
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">{t("common.subject_colon")}</span>
+        <span className="text-sm text-muted-foreground">
+          {t("common.subject_colon")}
+        </span>
         <Select
           value={subjectId ?? ""}
           onValueChange={(v) => setSubjectId(v || null)}
@@ -613,56 +661,62 @@ function SectionsSection() {
         <p className="text-sm text-muted-foreground">
           {!semesterId || !subjectId
             ? t("settings.select_sem_and_sub")
-            : t("settings.no_sections_for", { subject: selectedSubject?.name ?? t("settings.this_subject") })}
+            : t("settings.no_sections_for", {
+                subject: selectedSubject?.name ?? t("settings.this_subject"),
+              })}
         </p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[360px]">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium">{t("common.name")}</th>
-                <th className="text-right px-4 py-2 font-medium">{t("common.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sections.map((sec) => (
-                <tr key={sec.id} className="border-t">
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      {sec.color && (
-                        <span
-                          className="w-3 h-3 rounded-full inline-block"
-                          style={{ backgroundColor: sec.color }}
-                        />
-                      )}
-                      {sec.name}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 text-right space-x-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setEditingId(sec.id);
-                        setEditingName(sec.name);
-                      }}
-                    >
-                      {t("common.edit")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(sec.id)}
-                    >
-                      {t("common.delete")}
-                    </Button>
-                  </td>
+            <table className="w-full text-sm min-w-[360px]">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("common.name")}
+                  </th>
+                  <th className="text-right px-4 py-2 font-medium">
+                    {t("common.actions")}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sections.map((sec) => (
+                  <tr key={sec.id} className="border-t">
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-2">
+                        {sec.color && (
+                          <span
+                            className="w-3 h-3 rounded-full inline-block"
+                            style={{ backgroundColor: sec.color }}
+                          />
+                        )}
+                        {sec.name}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-right space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingId(sec.id);
+                          setEditingName(sec.name);
+                        }}
+                      >
+                        {t("common.edit")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(sec.id)}
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -692,6 +746,7 @@ function SectionsSection() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialogElement}
     </section>
   );
 }
@@ -729,8 +784,10 @@ function DataSection() {
   const [error, setError] = useState<string | null>(null);
 
   const ready = Boolean(
-    selectedSemesterYearId && selectedSubjectId && selectedSectionId,
+    selectedSemesterYearId && selectedSubjectId && selectedSectionId
   );
+
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
 
   const run = async (action: () => Promise<void>) => {
     setMessage(null);
@@ -801,7 +858,9 @@ function DataSection() {
         filters: [{ name: "Markbook backup", extensions: ["json"] }],
       });
       if (!path) return;
-      const written = await invoke<string>("backup_app_data", { filePath: path });
+      const written = await invoke<string>("backup_app_data", {
+        filePath: path,
+      });
       setMessage(`${t("settings.data_backup_done")} ${written}`);
     });
 
@@ -813,7 +872,11 @@ function DataSection() {
         filters: [{ name: "Markbook backup", extensions: ["json"] }],
       });
       if (!path) return;
-      if (!window.confirm(t("settings.data_restore_confirm"))) return;
+      const ok = await confirmDialog({
+        message: t("settings.data_restore_confirm"),
+        destructive: false,
+      });
+      if (!ok) return;
       const summary = await invoke<RestoreSummary>("restore_app_data", {
         filePath: path,
       });
@@ -826,12 +889,12 @@ function DataSection() {
         t("settings.data_restore_done", {
           tables: summary.tables_restored,
           rows: summary.rows_restored,
-        }),
+        })
       );
     });
 
   const selectedSemester = semesterYears.find(
-    (s) => s.id === selectedSemesterYearId,
+    (s) => s.id === selectedSemesterYearId
   );
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
   const selectedSection = sections.find((s) => s.id === selectedSectionId);
@@ -852,16 +915,25 @@ function DataSection() {
             {t("settings.data_import_description")}
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={handleImport} disabled={importing}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleImport}
+          disabled={importing}
+        >
           <FileUp />
-          {importing ? t("settings.data_importing") : t("settings.data_import_button")}
+          {importing
+            ? t("settings.data_importing")
+            : t("settings.data_import_button")}
         </Button>
         {report && (
           <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
             <p className="font-medium">{t("settings.data_report_title")}</p>
             <p>{t("settings.data_created", { count: report.created })}</p>
             <p>{t("settings.data_matched", { count: report.matched })}</p>
-            <p>{t("settings.data_skipped", { count: report.skipped.length })}</p>
+            <p>
+              {t("settings.data_skipped", { count: report.skipped.length })}
+            </p>
             <p>{t("settings.data_errors", { count: report.errors.length })}</p>
             {(report.skipped.length > 0 || report.errors.length > 0) && (
               <div className="mt-2 max-h-40 overflow-y-auto rounded-md border bg-background p-2 text-xs text-muted-foreground whitespace-pre-wrap">
@@ -934,6 +1006,7 @@ function DataSection() {
           </Button>
         </div>
       </div>
+      {confirmDialogElement}
     </section>
   );
 }
@@ -942,9 +1015,9 @@ function DataSection() {
 
 export default function Settings() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"semesters" | "subjects" | "sections" | "data">(
-    "semesters",
-  );
+  const [tab, setTab] = useState<
+    "semesters" | "subjects" | "sections" | "data"
+  >("semesters");
   const [version, setVersion] = useState<string | null>(null);
   const openGuide = useUIStore((s) => s.openGuide);
 
@@ -1178,7 +1251,9 @@ export default function Settings() {
             )}
             {updateInfo?.asset_size ? (
               <p className="text-xs text-muted-foreground">
-                {t("updates.size", { size: formatBytes(updateInfo.asset_size) })}
+                {t("updates.size", {
+                  size: formatBytes(updateInfo.asset_size),
+                })}
               </p>
             ) : null}
             <Button
@@ -1187,7 +1262,9 @@ export default function Settings() {
               disabled={downloading}
             >
               <Download className="h-4 w-4 mr-1" />
-              {downloading ? t("updates.downloading") : t("updates.download_install")}
+              {downloading
+                ? t("updates.downloading")
+                : t("updates.download_install")}
             </Button>
           </div>
         </DialogContent>

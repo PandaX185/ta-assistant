@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { NotebookText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,10 +33,9 @@ interface AttendanceRecord {
   status: string;
 }
 
-
-
 export default function Attendance() {
   const { t } = useTranslation();
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
   const navigate = useNavigate();
   const {
     selectedSemesterYearId,
@@ -53,7 +53,7 @@ export default function Attendance() {
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
   const [createDate, setCreateDate] = useState(
-    new Date().toISOString().split("T")[0],
+    new Date().toISOString().split("T")[0]
   );
   const [createDesc, setCreateDesc] = useState("");
 
@@ -74,22 +74,19 @@ export default function Attendance() {
     }
   }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
 
-  const loadAttendance = useCallback(
-    async (lectureId: string) => {
-      setLoading(true);
-      try {
-        const data = await invoke<AttendanceRecord[]>("get_attendance", {
-          lectureId,
-        });
-        setAttendance(data);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const loadAttendance = useCallback(async (lectureId: string) => {
+    setLoading(true);
+    try {
+      const data = await invoke<AttendanceRecord[]>("get_attendance", {
+        lectureId,
+      });
+      setAttendance(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadLectures();
@@ -102,7 +99,12 @@ export default function Attendance() {
   }, [selectedLecture, loadAttendance]);
 
   const handleCreate = async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId || !createDate)
+    if (
+      !selectedSemesterYearId ||
+      !selectedSubjectId ||
+      !selectedSectionId ||
+      !createDate
+    )
       return;
     try {
       await invoke("create_lecture", {
@@ -121,16 +123,18 @@ export default function Attendance() {
     }
   };
 
-
-
-  const handleToggle = async (lectureId: string, enrollmentId: string, currentlyPresent: boolean) => {
+  const handleToggle = async (
+    lectureId: string,
+    enrollmentId: string,
+    currentlyPresent: boolean
+  ) => {
     const status = currentlyPresent ? "absent" : "present";
     try {
       await invoke("mark_attendance", { lectureId, enrollmentId, status });
       setAttendance((prev) =>
         prev.map((a) =>
-          a.enrollment_id === enrollmentId ? { ...a, status } : a,
-        ),
+          a.enrollment_id === enrollmentId ? { ...a, status } : a
+        )
       );
     } catch (e) {
       console.error(e);
@@ -138,7 +142,10 @@ export default function Attendance() {
   };
 
   const handleDeleteLecture = async (id: string) => {
-    if (!window.confirm(t("attendance.delete_lecture_confirm"))) return;
+    const ok = await confirmDialog({
+      message: t("attendance.delete_lecture_confirm"),
+    });
+    if (!ok) return;
     try {
       await invoke("delete_lecture", { id });
       if (selectedLecture?.id === id) {
@@ -348,7 +355,7 @@ export default function Attendance() {
                         handleToggle(
                           selectedLecture.id,
                           record.enrollment_id,
-                          present,
+                          present
                         )
                       }
                       className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
@@ -367,6 +374,7 @@ export default function Attendance() {
           )}
         </div>
       </div>
+      {confirmDialogElement}
     </div>
   );
 }

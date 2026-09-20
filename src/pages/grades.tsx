@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -46,6 +47,7 @@ interface GradeSheet {
 
 export default function Grades() {
   const { t } = useTranslation();
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
   const {
     selectedSemesterYearId,
     selectedSubjectId,
@@ -63,7 +65,7 @@ export default function Grades() {
   const [createName, setCreateName] = useState("");
   const [createMax, setCreateMax] = useState("");
   const [createDate, setCreateDate] = useState(
-    new Date().toISOString().split("T")[0],
+    new Date().toISOString().split("T")[0]
   );
 
   // Tab view — column id
@@ -147,7 +149,10 @@ export default function Grades() {
       if (editing.type === "quiz") {
         await invoke("update_quiz_score", { id: editing.id, score: parsed });
       } else {
-        await invoke("update_assignment_score", { id: editing.id, score: parsed });
+        await invoke("update_assignment_score", {
+          id: editing.id,
+          score: parsed,
+        });
       }
       setEditing(null);
       loadGrades();
@@ -156,16 +161,26 @@ export default function Grades() {
     }
   };
 
-  const handleDeleteColumn = async (type: "quiz" | "assignment", colName: string, colDate: string) => {
-    if (!window.confirm(t("grades.delete_column_confirm", { name: colName }))) return;
+  const handleDeleteColumn = async (
+    type: "quiz" | "assignment",
+    colName: string,
+    colDate: string
+  ) => {
+    const ok = await confirmDialog({
+      message: t("grades.delete_column_confirm", { name: colName }),
+    });
+    if (!ok) return;
     try {
-      await invoke(type === "quiz" ? "delete_quiz_column" : "delete_assignment_column", {
-        semesterYearId: selectedSemesterYearId,
-        subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
-        name: colName,
-        date: colDate,
-      });
+      await invoke(
+        type === "quiz" ? "delete_quiz_column" : "delete_assignment_column",
+        {
+          semesterYearId: selectedSemesterYearId,
+          subjectId: selectedSubjectId,
+          sectionId: selectedSectionId,
+          name: colName,
+          date: colDate,
+        }
+      );
       loadGrades();
     } catch (e) {
       console.error(e);
@@ -192,7 +207,9 @@ export default function Grades() {
           {selectedSubject?.name}
           {selectedSection && ` · ${selectedSection.name}`}
         </p>
-        <p className="text-muted-foreground animate-pulse">{t("common.loading")}</p>
+        <p className="text-muted-foreground animate-pulse">
+          {t("common.loading")}
+        </p>
       </div>
     );
   }
@@ -232,7 +249,10 @@ export default function Grades() {
           open={createOpen}
           onOpenChange={(v) => {
             setCreateOpen(v);
-            if (!v) { setCreateName(""); setCreateMax(""); }
+            if (!v) {
+              setCreateName("");
+              setCreateMax("");
+            }
           }}
         >
           <DialogTrigger asChild>
@@ -247,14 +267,18 @@ export default function Grades() {
                 <Label>{t("grades.type")}</Label>
                 <Select
                   value={createType}
-                  onValueChange={(v) => setCreateType(v as "quiz" | "assignment")}
+                  onValueChange={(v) =>
+                    setCreateType(v as "quiz" | "assignment")
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="quiz">{t("grades.quiz")}</SelectItem>
-                    <SelectItem value="assignment">{t("grades.assignment")}</SelectItem>
+                    <SelectItem value="assignment">
+                      {t("grades.assignment")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -296,7 +320,10 @@ export default function Grades() {
       {(() => {
         const allColumns = [
           ...sheet.quizzes.map((q) => ({ ...q, type: "quiz" as const })),
-          ...sheet.assignments.map((a) => ({ ...a, type: "assignment" as const })),
+          ...sheet.assignments.map((a) => ({
+            ...a,
+            type: "assignment" as const,
+          })),
         ];
         if (allColumns.length === 0) {
           return (
@@ -305,7 +332,10 @@ export default function Grades() {
             </p>
           );
         }
-        if (!activeColumnId || !allColumns.some((c) => c.id === activeColumnId)) {
+        if (
+          !activeColumnId ||
+          !allColumns.some((c) => c.id === activeColumnId)
+        ) {
           setTimeout(() => setActiveColumnId(allColumns[0].id));
         }
         return (
@@ -320,7 +350,12 @@ export default function Grades() {
                 }`}
                 onClick={() => setActiveColumnId(col.id)}
               >
-                {col.type === "quiz" ? <FileText className="w-4 h-4 inline" /> : <ClipboardPenLine className="w-4 h-4 inline" />} {col.name}
+                {col.type === "quiz" ? (
+                  <FileText className="w-4 h-4 inline" />
+                ) : (
+                  <ClipboardPenLine className="w-4 h-4 inline" />
+                )}{" "}
+                {col.name}
               </button>
             ))}
           </div>
@@ -330,23 +365,42 @@ export default function Grades() {
       {/* Active column table — simple Student | Score */}
       {(() => {
         const allColumns = [
-          ...sheet.quizzes.map((q, i) => ({ ...q, type: "quiz" as const, index: i })),
-          ...sheet.assignments.map((a, i) => ({ ...a, type: "assignment" as const, index: i })),
+          ...sheet.quizzes.map((q, i) => ({
+            ...q,
+            type: "quiz" as const,
+            index: i,
+          })),
+          ...sheet.assignments.map((a, i) => ({
+            ...a,
+            type: "assignment" as const,
+            index: i,
+          })),
         ];
         const active = allColumns.find((c) => c.id === activeColumnId);
         if (!active) return null;
 
-        const getScore = active.type === "quiz"
-          ? (s: GradeStudent) => ({ score: s.quiz_scores[active.index], id: s.quiz_ids[active.index] })
-          : (s: GradeStudent) => ({ score: s.assignment_scores[active.index], id: s.assignment_ids[active.index] });
+        const getScore =
+          active.type === "quiz"
+            ? (s: GradeStudent) => ({
+                score: s.quiz_scores[active.index],
+                id: s.quiz_ids[active.index],
+              })
+            : (s: GradeStudent) => ({
+                score: s.assignment_scores[active.index],
+                id: s.assignment_ids[active.index],
+              });
 
         return (
           <div className="border rounded-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 bg-muted/30 text-xs text-muted-foreground">
-              <span className="font-semibold">{active.name} · / {active.max_score}</span>
+              <span className="font-semibold">
+                {active.name} · / {active.max_score}
+              </span>
               <button
                 className="text-destructive hover:underline"
-                onClick={() => handleDeleteColumn(active.type, active.name, active.date)}
+                onClick={() =>
+                  handleDeleteColumn(active.type, active.name, active.date)
+                }
               >
                 {t("grades.delete_item")}
               </button>
@@ -354,15 +408,22 @@ export default function Grades() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left px-3 py-2">{t("grades.student_col")}</th>
-                  <th className="text-center px-3 py-2">{t("grades.score_col")}</th>
+                  <th className="text-left px-3 py-2">
+                    {t("grades.student_col")}
+                  </th>
+                  <th className="text-center px-3 py-2">
+                    {t("grades.score_col")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {sheet.students.map((student) => {
                   const { score, id } = getScore(student);
                   return (
-                    <tr key={student.enrollment_id} className="border-t hover:bg-muted/20">
+                    <tr
+                      key={student.enrollment_id}
+                      className="border-t hover:bg-muted/20"
+                    >
                       <td className="px-3 py-2 font-medium text-xs">
                         {student.student_name}
                       </td>
@@ -377,7 +438,11 @@ export default function Grades() {
                             onChange={(e) => {
                               const val = e.target.value;
                               const num = parseFloat(val);
-                              if (editing && !isNaN(num) && num > editing.maxScore) {
+                              if (
+                                editing &&
+                                !isNaN(num) &&
+                                num > editing.maxScore
+                              ) {
                                 setEditValue(editing.maxScore.toString());
                               } else {
                                 setEditValue(val);
@@ -396,14 +461,22 @@ export default function Grades() {
                           <span
                             className="cursor-pointer hover:bg-accent rounded px-2 py-0.5 inline-block min-w-[2.5rem] text-xs"
                             onClick={() => {
-                              setEditing({ type: active.type, id, maxScore: active.max_score });
+                              setEditing({
+                                type: active.type,
+                                id,
+                                maxScore: active.max_score,
+                              });
                               setEditValue(score?.toString() ?? "");
                             }}
                           >
-                            {score !== null && score !== undefined ? score : "—"}
+                            {score !== null && score !== undefined
+                              ? score
+                              : "—"}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
+                          <span className="text-muted-foreground text-xs">
+                            —
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -414,6 +487,7 @@ export default function Grades() {
           </div>
         );
       })()}
+      {confirmDialogElement}
     </div>
   );
 }

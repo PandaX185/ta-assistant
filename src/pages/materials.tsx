@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { FileText, FolderOpen, Link2, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,9 +40,15 @@ interface SubjectLectureInfo {
  */
 export default function Materials() {
   const { t } = useTranslation();
+  const { confirmDialog, confirmDialogElement } = useConfirmDialog();
   const navigate = useNavigate();
-  const { semesterYears, selectedSemesterYearId, subjects, selectedSubjectId, setSelectedSubjectId } =
-    useFilterStore();
+  const {
+    semesterYears,
+    selectedSemesterYearId,
+    subjects,
+    selectedSubjectId,
+    setSelectedSubjectId,
+  } = useFilterStore();
   const [lectures, setLectures] = useState<SubjectLectureInfo[]>([]);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -53,7 +60,9 @@ export default function Materials() {
       setLectures([]);
       return;
     }
-    invoke<SubjectLectureInfo[]>("get_subject_lectures", { subjectId: selectedSubjectId })
+    invoke<SubjectLectureInfo[]>("get_subject_lectures", {
+      subjectId: selectedSubjectId,
+    })
       .then(setLectures)
       .catch(() => setLectures([]));
   }, [selectedSubjectId]);
@@ -93,12 +102,15 @@ export default function Materials() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(t("materials.delete_confirm"))) return;
+    const ok = await confirmDialog({ message: t("materials.delete_confirm") });
+    if (!ok) return;
     await invoke("delete_subject_lecture", { id });
     setLectures((ls) => ls.filter((l) => l.id !== id));
   };
 
-  const selectedSemester = semesterYears.find((s) => s.id === selectedSemesterYearId);
+  const selectedSemester = semesterYears.find(
+    (s) => s.id === selectedSemesterYearId
+  );
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -127,7 +139,9 @@ export default function Materials() {
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label htmlFor="mat-title">{t("materials.lecture_title")}</Label>
+                <Label htmlFor="mat-title">
+                  {t("materials.lecture_title")}
+                </Label>
                 <Input
                   id="mat-title"
                   placeholder={t("materials.lecture_title_placeholder")}
@@ -137,7 +151,9 @@ export default function Materials() {
               </div>
               {!editing && (
                 <div className="space-y-2">
-                  <Label htmlFor="mat-date">{t("materials.date_optional")}</Label>
+                  <Label htmlFor="mat-date">
+                    {t("materials.date_optional")}
+                  </Label>
                   <Input
                     id="mat-date"
                     type="date"
@@ -187,7 +203,9 @@ export default function Materials() {
       </div>
 
       {!selectedSubjectId ? (
-        <p className="text-sm text-muted-foreground">{t("materials.no_subject")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("materials.no_subject")}
+        </p>
       ) : lectures.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {t("materials.no_subject_lectures")}
@@ -252,6 +270,7 @@ export default function Materials() {
           ))}
         </div>
       )}
+      {confirmDialogElement}
     </div>
   );
 }

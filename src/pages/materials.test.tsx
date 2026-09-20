@@ -70,13 +70,13 @@ describe("Materials list", () => {
         <Routes>
           <Route path="/materials" element={<Materials />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("get_subject_lectures", {
         subjectId: "sub-1",
-      }),
+      })
     );
     expect(await screen.findByText("Week 1")).toBeInTheDocument();
     expect(screen.getByText("2 files")).toBeInTheDocument();
@@ -92,15 +92,15 @@ describe("Materials list", () => {
         subjectId: "sub-1",
         title: "Week 2",
         date: null,
-      }),
+      })
     );
     // The list reloads after create.
     await waitFor(() =>
       expect(
-        vi.mocked(invoke).mock.calls.filter(
-          ([cmd]) => cmd === "get_subject_lectures",
-        ).length,
-      ).toBeGreaterThanOrEqual(2),
+        vi
+          .mocked(invoke)
+          .mock.calls.filter(([cmd]) => cmd === "get_subject_lectures").length
+      ).toBeGreaterThanOrEqual(2)
     );
   });
 
@@ -113,7 +113,7 @@ describe("Materials list", () => {
           <Route path="/materials" element={<Materials />} />
           <Route path="/materials/:id" element={<div>DETAIL_PAGE</div>} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await user.click(await screen.findByText("Week 1"));
@@ -123,13 +123,12 @@ describe("Materials list", () => {
   it("renames and deletes a lecture entry", async () => {
     mockInvoke();
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(
       <MemoryRouter initialEntries={["/materials"]}>
         <Routes>
           <Route path="/materials" element={<Materials />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await screen.findByText("Week 1");
@@ -145,17 +144,17 @@ describe("Materials list", () => {
         id: "sl-1",
         title: "Week 1 — intro",
         date: "2026-02-01",
-      }),
+      })
     );
 
     // Delete with confirmation.
     await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await user.click(await screen.findByRole("button", { name: "Confirm" }));
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("delete_subject_lecture", {
         id: "sl-1",
-      }),
+      })
     );
-    expect(window.confirm).toHaveBeenCalled();
   });
 
   it("shows the no-subject empty state", async () => {
@@ -166,12 +165,12 @@ describe("Materials list", () => {
         <Routes>
           <Route path="/materials" element={<Materials />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
     expect(await screen.findByText(/Select a subject/)).toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalledWith(
       "get_subject_lectures",
-      expect.anything(),
+      expect.anything()
     );
   });
 });

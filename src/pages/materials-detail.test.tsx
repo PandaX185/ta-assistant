@@ -36,13 +36,18 @@ const bundle = {
 function renderDetail() {
   return render(
     <MemoryRouter
-      initialEntries={[{ pathname: "/materials/sl-1", state: { title: "Week 1", date: "2026-02-01" } }]}
+      initialEntries={[
+        {
+          pathname: "/materials/sl-1",
+          state: { title: "Week 1", date: "2026-02-01" },
+        },
+      ]}
     >
       <Routes>
         <Route path="/materials" element={<div>MATERIALS_LIST</div>} />
         <Route path="/materials/:id" element={<MaterialsDetail />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -52,8 +57,14 @@ beforeEach(() => {
   vi.mocked(invoke).mockImplementation((cmd: string) => {
     if (cmd === "get_lecture_materials") return Promise.resolve(bundle);
     if (cmd === "save_note")
-      return Promise.resolve({ id: "n1", lecture_id: "sl-1", content_md: "", updated_at: 2 });
-    if (cmd === "attach_files") return Promise.resolve({ files: [], errors: [] });
+      return Promise.resolve({
+        id: "n1",
+        lecture_id: "sl-1",
+        content_md: "",
+        updated_at: 2,
+      });
+    if (cmd === "attach_files")
+      return Promise.resolve({ files: [], errors: [] });
     if (cmd === "add_link")
       return Promise.resolve({
         id: "k2",
@@ -84,7 +95,7 @@ describe("Materials detail", () => {
       expect(invoke).toHaveBeenCalledWith("save_note", {
         lectureId: "sl-1",
         contentMd: expect.stringContaining("# Notes 2"),
-      }),
+      })
     );
   });
 
@@ -99,7 +110,7 @@ describe("Materials detail", () => {
       expect(invoke).toHaveBeenCalledWith("attach_files", {
         lectureId: "sl-1",
         files: [{ source: "/tmp/a.pdf" }],
-      }),
+      })
     );
   });
 
@@ -116,12 +127,11 @@ describe("Materials detail", () => {
         lectureId: "sl-1",
         title: "Spec",
         url: "https://spec.test",
-      }),
+      })
     );
   });
 
   it("deletes the lecture entry and returns to the list", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const user = userEvent.setup();
     renderDetail();
 
@@ -129,8 +139,11 @@ describe("Materials detail", () => {
     // Header "Delete" (lecture entry) — the first Delete button in the DOM;
     // the per-file delete is an icon button further down.
     await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await user.click(await screen.findByRole("button", { name: "Confirm" }));
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("delete_subject_lecture", { id: "sl-1" }),
+      expect(invoke).toHaveBeenCalledWith("delete_subject_lecture", {
+        id: "sl-1",
+      })
     );
     expect(screen.getByText("MATERIALS_LIST")).toBeInTheDocument();
   });
