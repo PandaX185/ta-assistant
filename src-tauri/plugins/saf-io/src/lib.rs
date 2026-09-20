@@ -23,6 +23,7 @@ struct ReadArg {
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WriteArg {
     uri: String,
     /// Base64-encoded bytes; the Kotlin side decodes before writing.
@@ -31,6 +32,7 @@ struct WriteArg {
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ReadResponse {
     data_b64: String,
 }
