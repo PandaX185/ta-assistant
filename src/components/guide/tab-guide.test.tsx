@@ -17,7 +17,7 @@ describe("TabGuide", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("walks intro then all six tabs and finishes", async () => {
+  it("walks intro then all five tabs and finishes", async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<TabGuide open onClose={onClose} />);
@@ -26,15 +26,8 @@ describe("TabGuide", () => {
     expect(screen.getByText("Welcome!")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
 
-    // one card per tab, in nav order
-    const tabs = [
-      "Dashboard",
-      "Students",
-      "Grades",
-      "Attendance",
-      "Materials",
-      "Settings",
-    ];
+    // one card per tab, in nav order (Settings lives in the top bar now)
+    const tabs = ["Dashboard", "Students", "Grades", "Attendance", "Materials"];
     for (const tab of tabs) {
       await user.click(screen.getByRole("button", { name: "Next" }));
       expect(screen.getByRole("heading", { name: tab })).toBeInTheDocument();
@@ -52,16 +45,16 @@ describe("TabGuide", () => {
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(
-      screen.getByRole("heading", { name: "Dashboard" }),
+      screen.getByRole("heading", { name: "Dashboard" })
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(
-      screen.getByRole("heading", { name: "Students" }),
+      screen.getByRole("heading", { name: "Students" })
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(
-      screen.getByRole("heading", { name: "Dashboard" }),
+      screen.getByRole("heading", { name: "Dashboard" })
     ).toBeInTheDocument();
   });
 
@@ -92,7 +85,7 @@ describe("TabGuide", () => {
     await userEvent.click(screen.getByRole("button", { name: "التالي" }));
     await waitFor(() => {
       expect(
-        screen.getByRole("heading", { name: "لوحة التحكم" }),
+        screen.getByRole("heading", { name: "لوحة التحكم" })
       ).toBeInTheDocument();
     });
   });

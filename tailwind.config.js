@@ -1,10 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: "class",
-  content: [
-    "./index.html",
-    "./src/**/*.{ts,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
@@ -46,6 +43,22 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "nav-bubble": {
+          "0%": { transform: "scale(0.7)" },
+          "55%": { transform: "scale(1.08)" },
+          "100%": { transform: "scale(1)" },
+        },
+        "icon-pop": {
+          "0%": { transform: "scale(0.75)" },
+          "50%": { transform: "scale(1.2)" },
+          "100%": { transform: "scale(1)" },
+        },
+      },
+      animation: {
+        "nav-bubble": "nav-bubble 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "icon-pop": "icon-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
       },
     },
   },

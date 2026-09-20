@@ -6,7 +6,13 @@ import { navItems } from "@/components/layout/nav-items";
 import { cn } from "@/lib/utils";
 
 /** Keys used for per-tab descriptions — order matches navItems. */
-const TAB_KEYS = ["dashboard", "students", "grades", "attendance", "materials", "settings"] as const;
+const TAB_KEYS = [
+  "dashboard",
+  "students",
+  "grades",
+  "attendance",
+  "materials",
+] as const;
 
 interface Props {
   open: boolean;
@@ -21,7 +27,7 @@ interface Props {
 export default function TabGuide({ open, onClose }: Props) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
-  const total = 1 + navItems.length; // intro + 5 tabs
+  const total = 1 + navItems.length; // intro + tabs
 
   // Reset to the intro whenever the guide opens
   useEffect(() => {
@@ -73,7 +79,7 @@ export default function TabGuide({ open, onClose }: Props) {
               key={i}
               className={cn(
                 "h-1.5 rounded-full transition-all",
-                i === step ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/30",
+                i === step ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/30"
               )}
             />
           ))}

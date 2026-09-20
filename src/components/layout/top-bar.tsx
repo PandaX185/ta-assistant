@@ -1,8 +1,10 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Moon, Sun, Globe } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import { Moon, Sun, Globe, Settings } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 import { applyLocale } from "@/i18n";
 import { useLocaleStore } from "@/stores/locale-store";
@@ -52,6 +54,20 @@ export default function TopBar() {
             <Moon className="w-4 h-4" />
           )}
         </Button>
+
+        <NavLink
+          to="/settings"
+          title={t("sidebar.settings")}
+          className={({ isActive }) =>
+            cn(
+              buttonVariants({ variant: "ghost", size: "icon" }),
+              isActive && "bg-accent text-accent-foreground"
+            )
+          }
+        >
+          <Settings className="w-4 h-4" />
+          <span className="sr-only">{t("sidebar.settings")}</span>
+        </NavLink>
       </div>
     </header>
   );

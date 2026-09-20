@@ -301,7 +301,6 @@
     "grades_desc": "Record quiz and assignment grades for each section.",
     "attendance_desc": "Mark attendance lecture by lecture, with a history per section.",
     "materials_desc": "Keep notes, files and links per lecture for each subject — independent of attendance.",
-    "settings_desc": "Manage semesters, subjects and sections, plus language, theme and your password.",
     "skip": "Skip",
     "back": "Back",
     "next": "Next",

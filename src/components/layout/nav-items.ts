@@ -4,7 +4,6 @@ import {
   ClipboardList,
   CalendarCheck,
   FolderOpen,
-  Settings,
 } from "lucide-react";
 
 export const navItems = [
@@ -13,5 +12,4 @@ export const navItems = [
   { to: "/grades", icon: ClipboardList, labelKey: "sidebar.grades" },
   { to: "/attendance", icon: CalendarCheck, labelKey: "sidebar.attendance" },
   { to: "/materials", icon: FolderOpen, labelKey: "sidebar.materials" },
-  { to: "/settings", icon: Settings, labelKey: "sidebar.settings" },
 ];
