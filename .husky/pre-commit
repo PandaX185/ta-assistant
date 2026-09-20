@@ -1,0 +1,4 @@
+npx lint-staged
+npm run typecheck
+npm test
+cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings

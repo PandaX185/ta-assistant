@@ -242,20 +242,32 @@ fn already_enrolled(
     Ok(exists.is_some())
 }
 
-/// Import one CSV row: match or create the student, then enroll. Pushes the
-/// outcome into `report` — nothing is silently dropped.
-fn import_one(
-    conn: &Connection,
+/// Identity fields for one CSV row, grouped so `import_one` keeps a small
+/// signature.
+struct ImportRow {
     name: String,
     email: Option<String>,
     student_id: Option<String>,
     phone: Option<String>,
+}
+
+/// Import one CSV row: match or create the student, then enroll. Pushes the
+/// outcome into `report` — nothing is silently dropped.
+fn import_one(
+    conn: &Connection,
+    row: ImportRow,
     semester_year_id: &str,
     subject_id: &str,
     section_id: &str,
     row_no: usize,
     report: &mut ImportReport,
 ) {
+    let ImportRow {
+        name,
+        email,
+        student_id,
+        phone,
+    } = row;
     let matched = match match_student(conn, &name, student_id.clone(), phone.clone()) {
         Ok(m) => m,
         Err(e) => {
@@ -353,10 +365,12 @@ fn import_csv_impl(
         match cell(row, 0) {
             Some(name) => import_one(
                 conn,
-                name,
-                cell(row, 2), // email
-                cell(row, 1), // student id
-                cell(row, 3), // phone
+                ImportRow {
+                    name,
+                    email: cell(row, 2),
+                    student_id: cell(row, 1),
+                    phone: cell(row, 3),
+                },
                 semester_year_id,
                 subject_id,
                 section_id,
@@ -576,12 +590,14 @@ fn score_cell(score: Option<f64>) -> String {
     score.map(fmt_score).unwrap_or_default()
 }
 
+/// One wide-report column: display name and its max score.
+type GradedColumn = (String, f64);
+/// Quiz columns then assignment columns — the "columns" of the wide report.
+type GradedColumns = (Vec<GradedColumn>, Vec<GradedColumn>);
+
 /// Distinct (name, max) pairs for quizzes then assignments across all
 /// enrollments in the section — the "columns" of the wide report.
-fn graded_columns(
-    conn: &Connection,
-    section_id: &str,
-) -> Result<(Vec<(String, f64)>, Vec<(String, f64)>), String> {
+fn graded_columns(conn: &Connection, section_id: &str) -> Result<GradedColumns, String> {
     let quizzes = {
         let mut stmt = conn
             .prepare(
@@ -1181,7 +1197,7 @@ mod tests {
             "He said \"hi\"".to_string(),
             "سارة عمر\nsecond line".to_string(),
         ];
-        let csv = to_csv(&[row.clone()]);
+        let csv = to_csv(std::slice::from_ref(&row));
         let parsed = parse_csv(&csv);
         assert_eq!(parsed, vec![row]);
     }
