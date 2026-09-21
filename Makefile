@@ -1,7 +1,8 @@
 # TA Assistant
 
 .PHONY: all install dev build lint check test test-rust test-frontend clean \
-	android-dev android-apk android-aab android-clean android-key-setup
+	android-dev android-apk android-aab android-clean android-key-setup \
+	release
 
 # Android SDK location. Auto-detects the user SDK first (Android Studio
 # installs to ~/Android/Sdk), then falls back to a system-wide SDK.
@@ -96,6 +97,13 @@ android-key-setup:  ## Write gitignored keystore.properties from env vars
 		echo "Wrote src-tauri/gen/android/keystore.properties"; \
 	fi
 
+# ─── Release ─────────────────────────────────────────────
+# Bumps the version in package.json, src-tauri/Cargo.toml ([package] only)
+# and src-tauri/tauri.conf.json. Cargo.lock is NOT touched — the next cargo
+# command syncs its ta-assistant line. Example: make release v=1.4.0
+release:  ## Bump version everywhere: make release v=patch|minor|major|x.y.z
+	node scripts/release.mjs $(v)
+
 # ─── Help ───────────────────────────────────────────────
 help:
 	@echo "Usage:"
@@ -113,3 +121,4 @@ help:
 	@echo "  make android-aab      Build signed release AAB"
 	@echo "  make android-clean    Clean Android build artifacts"
 	@echo "  make android-key-setup  Write keystore.properties (needs KEYSTORE_PASSWORD, KEY_PASSWORD)"
+	@echo "  make release v=1.4.0    Bump version in all manifests (v=patch|minor|major|x.y.z)"
