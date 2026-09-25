@@ -851,6 +851,27 @@ function DataSection() {
       setMessage(`${t("settings.data_saved_to")} ${written}`);
     });
 
+  const handleExportExcel = () =>
+    run(async () => {
+      const sectionName = (
+        sections.find((s) => s.id === selectedSectionId)?.name ?? "section"
+      ).replace(/[\\/:*?"<>|]/g, "_");
+      const path = await saveDialog({
+        defaultPath: `${sectionName}-export-${new Date()
+          .toISOString()
+          .slice(0, 10)}.xlsx`,
+        filters: [{ name: "Excel", extensions: ["xlsx"] }],
+      });
+      if (!path) return;
+      const written = await invoke<string>("export_section_excel", {
+        semesterYearId: selectedSemesterYearId,
+        subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
+        filePath: path,
+      });
+      setMessage(`${t("settings.data_saved_to")} ${written}`);
+    });
+
   const handleBackup = () =>
     run(async () => {
       const path = await saveDialog({
@@ -960,6 +981,10 @@ function DataSection() {
             <Button size="sm" variant="outline" onClick={handleExportReport}>
               <FileDown />
               {t("settings.data_export_report")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleExportExcel}>
+              <FileDown />
+              {t("settings.data_export_excel")}
             </Button>
           </div>
         ) : (

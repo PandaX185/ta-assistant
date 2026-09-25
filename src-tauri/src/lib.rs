@@ -108,6 +108,7 @@ pub fn run() {
             commands::data_io::import_students_csv,
             commands::data_io::export_students_csv,
             commands::data_io::export_grades_report_csv,
+            commands::data_io::export_section_excel,
             commands::data_io::save_text_file,
             commands::data_io::backup_app_data,
             commands::data_io::restore_app_data,

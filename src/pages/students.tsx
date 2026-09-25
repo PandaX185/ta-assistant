@@ -22,7 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Users, ClipboardList, Copy, Check } from "lucide-react";
+import { Users, ClipboardList, Copy, Check, MessageCircle } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useFilterStore } from "@/stores/filter-store";
 import { StudentDetailDialog } from "@/components/students/student-detail-dialog";
 import { useCopyFeedback } from "@/lib/use-copy-feedback";
@@ -73,8 +74,24 @@ export default function Students() {
 
   const { copy: copyPhone, isCopied } = useCopyFeedback();
 
+  // WhatsApp group helper: WhatsApp offers no free API to create a group with
+  // members pre-added, so we copy every section phone number (exactly as
+  // stored) and open WhatsApp — the teacher pastes them when adding
+  // participants to the new group.
+  const sectionPhones = enrollments
+    .map((e) => e.student_phone?.trim())
+    .filter((p): p is string => !!p);
+  const groupCopied = isCopied("whatsapp-group");
+  const handleWhatsAppGroup = async () => {
+    if (sectionPhones.length === 0) return;
+    await copyPhone("whatsapp-group", sectionPhones.join("\n"));
+    await openUrl("https://wa.me/");
+  };
+
   // Detail dialog
-  const [detailEnrollmentId, setDetailEnrollmentId] = useState<string | null>(null);
+  const [detailEnrollmentId, setDetailEnrollmentId] = useState<string | null>(
+    null
+  );
 
   // Pick up pending detail from spotlight search
   useEffect(() => {
@@ -85,7 +102,10 @@ export default function Students() {
   }, [pendingDetailEnrollmentId, setPendingDetailEnrollmentId]);
 
   // Delete confirm
-  const [deleteTarget, setDeleteTarget] = useState<{ studentId: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    studentId: string;
+    name: string;
+  } | null>(null);
 
   const loadEnrollments = useCallback(async () => {
     if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
@@ -191,11 +211,11 @@ export default function Students() {
       if (phone.trim()) queries.push(phone.trim());
       const results = await Promise.all(
         queries.map((q) =>
-          invoke<StudentMatch[]>("find_students", { query: q }),
-        ),
+          invoke<StudentMatch[]>("find_students", { query: q })
+        )
       );
       const merged = Array.from(
-        new Map(results.flat().map((m) => [m.id, m])).values(),
+        new Map(results.flat().map((m) => [m.id, m])).values()
       );
       if (merged.length > 0) {
         setMatches(merged);
@@ -218,19 +238,15 @@ export default function Students() {
     }
   };
 
-  const selectedSubject = subjects.find(
-    (s) => s.id === selectedSubjectId,
-  );
-  const selectedSection = sections.find(
-    (s) => s.id === selectedSectionId,
-  );
+  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
+  const selectedSection = sections.find((s) => s.id === selectedSectionId);
 
   const filtered = search
     ? enrollments.filter(
         (e) =>
           e.student_name.toLowerCase().includes(search.toLowerCase()) ||
           (e.student_code ?? "").toLowerCase().includes(search.toLowerCase()) ||
-          (e.student_phone ?? "").toLowerCase().includes(search.toLowerCase()),
+          (e.student_phone ?? "").toLowerCase().includes(search.toLowerCase())
       )
     : enrollments;
 
@@ -243,7 +259,9 @@ export default function Students() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <Users className="w-12 h-12 mb-4 text-muted-foreground" />
-        <h2 className="text-xl font-semibold mb-2">{t("students.select_section")}</h2>
+        <h2 className="text-xl font-semibold mb-2">
+          {t("students.select_section")}
+        </h2>
         <p className="text-muted-foreground max-w-md">
           {t("students.select_section_desc")}
         </p>
@@ -261,147 +279,183 @@ export default function Students() {
             {selectedSubject?.name}
           </p>
         </div>
-        <Dialog
-          open={open}
-          onOpenChange={(v) => {
-            setOpen(v);
-            if (!v) resetForm();
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button size="sm">{t("students.add_student")}</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editId ? t("students.edit_student") : t("students.new_student")}
-              </DialogTitle>
-              {editId && (
-                <DialogDescription>{t("students.editing_student")}</DialogDescription>
-              )}
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div className="space-y-2">
-                <Label htmlFor="s-name">{t("students.name")}</Label>
-                <Input
-                  id="s-name"
-                  placeholder={t("students.name_placeholder")}
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setMatches([]);
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="s-email">{t("students.email_optional")}</Label>
-                <Input
-                  id="s-email"
-                  type="email"
-                  placeholder={t("students.email_placeholder")}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="s-phone">{t("students.phone_optional")}</Label>
-                <Input
-                  id="s-phone"
-                  type="tel"
-                  inputMode="tel"
-                  dir="ltr"
-                  placeholder={t("students.phone_placeholder")}
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    setMatches([]);
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="s-id">{t("students.student_id_optional")}</Label>
-                <Input
-                  id="s-id"
-                  placeholder={t("students.student_id_placeholder")}
-                  value={studentId}
-                  onChange={(e) => {
-                    setStudentId(e.target.value);
-                    setMatches([]);
-                  }}
-                />
-              </div>
-              {!editId && (
-                <p className="text-xs text-muted-foreground text-center">
-                  {t("students.will_be_enrolled_in")}{" "}
-                  <span className="font-medium">{selectedSubject?.name}</span>
-                  {selectedSection && (
-                    <>
-                      {" · "}
-                      <span className="font-medium">{selectedSection.name}</span>
-                    </>
-                  )}
-                </p>
-              )}
-              {!editId && matches.length > 0 && (
-                <div className="border rounded-lg divide-y">
-                  <p className="px-3 py-2 text-xs font-medium text-muted-foreground">
-                    {t("students.matches_found")}
-                  </p>
-                  {matches.map((m) => {
-                    const alreadyEnrolled = enrolledIds.has(m.id);
-                    return (
-                      <div
-                        key={m.id}
-                        className={`flex items-center justify-between gap-2 px-3 py-2 ${
-                          alreadyEnrolled ? "opacity-60" : ""
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{m.name}</p>
-                          <p className="text-xs text-muted-foreground font-mono truncate">
-                            {m.student_id ?? "—"}
-                            {m.phone && (
-                              <>
-                                {" · "}
-                                <span dir="ltr">{m.phone}</span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={alreadyEnrolled}
-                          onClick={() => useExistingStudent(m.id)}
-                        >
-                          {alreadyEnrolled
-                            ? t("students.already_enrolled")
-                            : t("students.use_existing")}
-                        </Button>
-                      </div>
-                    );
-                  })}
-                  <div className="px-3 py-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-full text-muted-foreground"
-                      onClick={() => {
-                        setMatches([]);
-                        createNewStudent();
-                      }}
-                    >
-                      {t("students.create_new_anyway")}
-                    </Button>
-                  </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleWhatsAppGroup}
+            disabled={sectionPhones.length === 0}
+            title={
+              sectionPhones.length === 0
+                ? t("students.whatsapp_no_phones")
+                : t("students.whatsapp_hint", { count: sectionPhones.length })
+            }
+          >
+            {groupCopied ? (
+              <Check className="text-green-500" />
+            ) : (
+              <MessageCircle />
+            )}
+            {groupCopied
+              ? t("students.whatsapp_copied", { count: sectionPhones.length })
+              : t("students.whatsapp_group")}
+          </Button>
+          <Dialog
+            open={open}
+            onOpenChange={(v) => {
+              setOpen(v);
+              if (!v) resetForm();
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button size="sm">{t("students.add_student")}</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {editId
+                    ? t("students.edit_student")
+                    : t("students.new_student")}
+                </DialogTitle>
+                {editId && (
+                  <DialogDescription>
+                    {t("students.editing_student")}
+                  </DialogDescription>
+                )}
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label htmlFor="s-name">{t("students.name")}</Label>
+                  <Input
+                    id="s-name"
+                    placeholder={t("students.name_placeholder")}
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setMatches([]);
+                    }}
+                  />
                 </div>
-              )}
-              <Button onClick={handleSave} className="w-full">
-                {editId ? t("students.update") : t("students.create")}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+                <div className="space-y-2">
+                  <Label htmlFor="s-email">
+                    {t("students.email_optional")}
+                  </Label>
+                  <Input
+                    id="s-email"
+                    type="email"
+                    placeholder={t("students.email_placeholder")}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="s-phone">
+                    {t("students.phone_optional")}
+                  </Label>
+                  <Input
+                    id="s-phone"
+                    type="tel"
+                    inputMode="tel"
+                    dir="ltr"
+                    placeholder={t("students.phone_placeholder")}
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      setMatches([]);
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="s-id">
+                    {t("students.student_id_optional")}
+                  </Label>
+                  <Input
+                    id="s-id"
+                    placeholder={t("students.student_id_placeholder")}
+                    value={studentId}
+                    onChange={(e) => {
+                      setStudentId(e.target.value);
+                      setMatches([]);
+                    }}
+                  />
+                </div>
+                {!editId && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    {t("students.will_be_enrolled_in")}{" "}
+                    <span className="font-medium">{selectedSubject?.name}</span>
+                    {selectedSection && (
+                      <>
+                        {" · "}
+                        <span className="font-medium">
+                          {selectedSection.name}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                )}
+                {!editId && matches.length > 0 && (
+                  <div className="border rounded-lg divide-y">
+                    <p className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                      {t("students.matches_found")}
+                    </p>
+                    {matches.map((m) => {
+                      const alreadyEnrolled = enrolledIds.has(m.id);
+                      return (
+                        <div
+                          key={m.id}
+                          className={`flex items-center justify-between gap-2 px-3 py-2 ${
+                            alreadyEnrolled ? "opacity-60" : ""
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {m.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground font-mono truncate">
+                              {m.student_id ?? "—"}
+                              {m.phone && (
+                                <>
+                                  {" · "}
+                                  <span dir="ltr">{m.phone}</span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={alreadyEnrolled}
+                            onClick={() => useExistingStudent(m.id)}
+                          >
+                            {alreadyEnrolled
+                              ? t("students.already_enrolled")
+                              : t("students.use_existing")}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    <div className="px-3 py-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full text-muted-foreground"
+                        onClick={() => {
+                          setMatches([]);
+                          createNewStudent();
+                        }}
+                      >
+                        {t("students.create_new_anyway")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <Button onClick={handleSave} className="w-full">
+                  {editId ? t("students.update") : t("students.create")}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search */}
@@ -434,15 +488,26 @@ export default function Students() {
             <table className="w-full text-sm min-w-[520px]">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left px-4 py-2 font-medium">{t("common.name")}</th>
-                  <th className="text-left px-4 py-2 font-medium">{t("students.id")}</th>
-                  <th className="text-left px-4 py-2 font-medium">{t("students.phone_column")}</th>
-                  <th className="text-right px-4 py-2 font-medium w-20">{t("common.actions")}</th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("common.name")}
+                  </th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("students.id")}
+                  </th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("students.phone_column")}
+                  </th>
+                  <th className="text-right px-4 py-2 font-medium w-20">
+                    {t("common.actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((enr) => (
-                  <tr key={enr.id} className="border-t hover:bg-muted/30 cursor-pointer">
+                  <tr
+                    key={enr.id}
+                    className="border-t hover:bg-muted/30 cursor-pointer"
+                  >
                     <td
                       className="px-4 py-2 font-medium text-primary hover:underline"
                       onClick={() => setDetailEnrollmentId(enr.id)}
@@ -519,13 +584,16 @@ export default function Students() {
       {/* Delete confirmation */}
       <AlertDialog
         open={deleteTarget !== null}
-        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+        onOpenChange={(v) => {
+          if (!v) setDeleteTarget(null);
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("students.delete_student")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("students.delete_student_desc_1")} <strong>{deleteTarget?.name}</strong>{" "}
+              {t("students.delete_student_desc_1")}{" "}
+              <strong>{deleteTarget?.name}</strong>{" "}
               {t("students.delete_student_desc_2")}
             </AlertDialogDescription>
           </AlertDialogHeader>

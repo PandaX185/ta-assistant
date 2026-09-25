@@ -324,6 +324,49 @@ describe("Settings", () => {
     expect(screen.getByRole("button", { name: "Choose CSV…" })).toBeEnabled();
   });
 
+  it("exports the section to Excel at a user-chosen path", async () => {
+    mockInvoke();
+    vi.mocked(invoke).mockImplementation((cmd: string, args?: any) => {
+      if (cmd === "export_section_excel") return Promise.resolve(args.filePath);
+      if (cmd === "get_semester_years") return Promise.resolve(semesterYears);
+      if (cmd === "get_subjects") return Promise.resolve(subjects);
+      if (cmd === "get_sections") return Promise.resolve(sections);
+      return Promise.resolve(undefined);
+    });
+    useFilterStore.setState({
+      semesterYears,
+      subjects,
+      sections,
+      selectedSemesterYearId: "sy-1",
+      selectedSubjectId: "sub-1",
+      selectedSectionId: "sec-1",
+      loaded: true,
+    });
+    vi.mocked(saveDialog).mockResolvedValue("/tmp/Group A-export.xlsx");
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await openTab(user, "Data");
+    await user.click(
+      await screen.findByRole("button", { name: "Export section (Excel)" })
+    );
+
+    expect(saveDialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [{ name: "Excel", extensions: ["xlsx"] }],
+      })
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("export_section_excel", {
+        semesterYearId: "sy-1",
+        subjectId: "sub-1",
+        sectionId: "sec-1",
+        filePath: "/tmp/Group A-export.xlsx",
+      })
+    );
+    expect(await screen.findByText(/\.xlsx/)).toBeInTheDocument();
+  });
+
   it("creates a backup at a user-chosen path", async () => {
     mockInvoke();
     vi.mocked(saveDialog).mockResolvedValue("/tmp/markbook-backup.json");

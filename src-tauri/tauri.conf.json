@@ -1,6 +1,6 @@
 {
   "productName": "xLa",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "identifier": "com.pandax185.ta-assistant",
   "build": {
     "frontendDist": "../dist",

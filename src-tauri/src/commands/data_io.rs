@@ -793,6 +793,258 @@ pub fn export_grades_report_csv(
 }
 
 // ---------------------------------------------------------------------------
+// Export: section workbook (xlsx)
+// ---------------------------------------------------------------------------
+
+/// One lecture of a section, ordered by date — each becomes a "Lecture N"
+/// column in the workbook.
+struct SectionLecture {
+    id: String,
+    title: Option<String>,
+    date: String,
+}
+
+fn section_lectures(conn: &Connection, section_id: &str) -> Result<Vec<SectionLecture>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, title, date FROM lectures
+             WHERE section_id = ?1
+             ORDER BY date, id",
+        )
+        .map_err(|e| format!("lecture cols prepare failed: {e}"))?;
+    let rows = stmt
+        .query_map(params![section_id], |row| {
+            Ok(SectionLecture {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                date: row.get(2)?,
+            })
+        })
+        .map_err(|e| format!("lecture cols failed: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("lecture col row failed: {e}"))?;
+    Ok(rows)
+}
+
+/// Attendance status for one (enrollment, lecture) cell, or None when the
+/// lecture hasn't been marked for that student yet.
+fn lecture_status(
+    conn: &Connection,
+    enrollment_id: &str,
+    lecture_id: &str,
+) -> Result<Option<String>, String> {
+    match conn.query_row(
+        "SELECT status FROM attendance WHERE enrollment_id = ?1 AND lecture_id = ?2",
+        params![enrollment_id, lecture_id],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(status) => Ok(Some(status)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!("lecture status failed: {e}")),
+    }
+}
+
+/// Header label for the Nth lecture column (1-based). Untitled lectures fall
+/// back to their date so the column is still identifiable.
+fn lecture_column_label(index: usize, lecture: &SectionLecture) -> String {
+    match lecture
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        Some(title) => format!("Lecture {}: {} ({})", index + 1, title, lecture.date),
+        None => format!("Lecture {} ({})", index + 1, lecture.date),
+    }
+}
+
+/// Header + body rows for the section workbook: base identity columns first
+/// (`id, name, phone, email`), then one column per lecture (attendance
+/// status), then one per quiz/assignment (score). Sections with no lectures,
+/// quizzes, or assignments simply get fewer columns.
+fn section_workbook_rows(
+    conn: &Connection,
+    section_id: &str,
+) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    let (quiz_cols, assign_cols) = graded_columns(conn, section_id)?;
+    let lectures = section_lectures(conn, section_id)?;
+    let mut header = vec![
+        "id".to_string(),
+        "name".to_string(),
+        "phone".to_string(),
+        "email".to_string(),
+    ];
+    for (i, lecture) in lectures.iter().enumerate() {
+        header.push(lecture_column_label(i, lecture));
+    }
+    for (i, (name, max)) in quiz_cols.iter().enumerate() {
+        header.push(format!(
+            "Quiz {}: {} (max {})",
+            i + 1,
+            name,
+            fmt_score(*max)
+        ));
+    }
+    for (i, (name, max)) in assign_cols.iter().enumerate() {
+        header.push(format!(
+            "Assignment {}: {} (max {})",
+            i + 1,
+            name,
+            fmt_score(*max)
+        ));
+    }
+
+    let enrollments = section_enrollment_students(conn, section_id)?;
+    let mut body = Vec::with_capacity(enrollments.len());
+    for e in &enrollments {
+        let mut row = vec![
+            e.student_code.clone().unwrap_or_default(),
+            e.name.clone(),
+            e.phone.clone().unwrap_or_default(),
+            e.email.clone().unwrap_or_default(),
+        ];
+        for lecture in &lectures {
+            row.push(lecture_status(conn, &e.enrollment_id, &lecture.id)?.unwrap_or_default());
+        }
+        for (name, _) in &quiz_cols {
+            row.push(score_cell(graded_score(
+                conn,
+                &e.enrollment_id,
+                name,
+                "quizzes",
+            )?));
+        }
+        for (name, _) in &assign_cols {
+            row.push(score_cell(graded_score(
+                conn,
+                &e.enrollment_id,
+                name,
+                "assignments",
+            )?));
+        }
+        body.push(row);
+    }
+    Ok((header, body))
+}
+
+fn section_display_name(conn: &Connection, section_id: &str) -> Result<String, String> {
+    conn.query_row(
+        "SELECT name FROM sections WHERE id = ?1",
+        params![section_id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .map_err(|e| format!("section name failed: {e}"))
+    .map(|name| {
+        name.filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| "Section".into())
+    })
+}
+
+/// Excel sheet names cap at 31 characters and forbid `[]:*?/\` — sanitize so
+/// a section name can never break the workbook.
+fn sanitize_sheet_name(name: &str) -> String {
+    let mut out: String = name
+        .chars()
+        .map(|c| {
+            if matches!(c, '[' | ']' | ':' | '*' | '?' | '/' | '\\') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    while out.chars().count() > 31 {
+        out.pop();
+    }
+    if out.trim().is_empty() {
+        out = "Section".to_string();
+    }
+    out
+}
+
+/// Render header + body as an .xlsx byte buffer: bold header row, frozen top
+/// row, and widths tuned per column kind (identity columns wider, activity
+/// columns narrow since they hold a status word or a short score).
+fn write_section_workbook(
+    sheet_name: &str,
+    header: &[String],
+    body: &[Vec<String>],
+) -> Result<Vec<u8>, String> {
+    use rust_xlsxwriter::Format;
+    let mut workbook = rust_xlsxwriter::Workbook::new();
+    let sheet = workbook.add_worksheet();
+    sheet
+        .set_name(sanitize_sheet_name(sheet_name))
+        .map_err(|e| format!("sheet name failed: {e}"))?;
+
+    let header_format = Format::new().set_bold();
+    for (col, cell) in header.iter().enumerate() {
+        sheet
+            .write_string_with_format(0, col as u16, cell, &header_format)
+            .map_err(|e| format!("header write failed: {e}"))?;
+    }
+    for (r, row) in body.iter().enumerate() {
+        let row_idx = (r + 1) as u32;
+        for (col, cell) in row.iter().enumerate() {
+            sheet
+                .write_string(row_idx, col as u16, cell)
+                .map_err(|e| format!("cell write failed: {e}"))?;
+        }
+    }
+    sheet
+        .set_freeze_panes(1, 0)
+        .map_err(|e| format!("freeze panes failed: {e}"))?;
+    for (col, cell) in header.iter().enumerate() {
+        let default = match col {
+            0 => 14.0, // id
+            1 => 24.0, // name
+            2 => 16.0, // phone
+            3 => 26.0, // email
+            _ => 20.0, // activity columns
+        };
+        let width = (cell.chars().count() as f64 + 2.0).clamp(default, 42.0);
+        sheet
+            .set_column_width(col as u16, width)
+            .map_err(|e| format!("column width failed: {e}"))?;
+    }
+    workbook
+        .save_to_buffer()
+        .map_err(|e| format!("xlsx render failed: {e}"))
+}
+
+/// Build the section workbook bytes (scope-checked). Kept free of `AppHandle`
+/// so unit tests can exercise the whole pipeline against an in-memory DB.
+fn export_section_excel_impl(
+    conn: &Connection,
+    semester_year_id: &str,
+    subject_id: &str,
+    section_id: &str,
+) -> Result<(String, Vec<u8>), String> {
+    ensure_section_scoped(conn, semester_year_id, subject_id, section_id)?;
+    let (header, body) = section_workbook_rows(conn, section_id)?;
+    let name = section_display_name(conn, section_id)?;
+    let bytes = write_section_workbook(&name, &header, &body)?;
+    Ok((name, bytes))
+}
+
+/// Export one section as a formatted .xlsx workbook the user picked: identity
+/// columns, one column per lecture (attendance status), one per quiz and per
+/// assignment (score, max in the header). Returns the path that was written.
+#[tauri::command]
+pub fn export_section_excel(
+    app: AppHandle,
+    semester_year_id: String,
+    subject_id: String,
+    section_id: String,
+    file_path: String,
+) -> Result<String, String> {
+    let conn = crate::db::open_db(&app)?;
+    let (_, bytes) = export_section_excel_impl(&conn, &semester_year_id, &subject_id, &section_id)?;
+    write_output(&app, &file_path, &bytes)?;
+    Ok(file_path)
+}
+
+// ---------------------------------------------------------------------------
 // Generic text save (used for any user-picked plain-text export)
 // ---------------------------------------------------------------------------
 
@@ -1567,5 +1819,134 @@ mod tests {
             sql,
             "INSERT INTO students (id, name) VALUES ('o''brien', NULL);"
         );
+    }
+
+    // ----- Section workbook (xlsx) -----
+
+    /// Full section fixture: quiz (one scored, one ungraded), assignment,
+    /// lecture with mixed attendance. Returns (sy, subject) ids.
+    fn seed_section_workbook(conn: &Connection) -> (String, String) {
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(conn);
+        conn.execute(
+            "UPDATE students SET student_id = '42', phone = '0100' WHERE id = 'stu-a'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO quizzes (id, enrollment_id, name, max_score, score, date)
+             VALUES ('q1', 'enr-a', 'Quiz 1', 10, 8, '2026-03-01')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO quizzes (id, enrollment_id, name, max_score, score, date)
+             VALUES ('q2', 'enr-b', 'Quiz 1', 10, NULL, '2026-03-01')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO assignments (id, enrollment_id, name, max_score, score, due_date)
+             VALUES ('a1', 'enr-a', 'HW 1', 20, 15, '2026-03-05')",
+            [],
+        )
+        .unwrap();
+        crate::commands::attendance_cmd::create_lecture_impl(
+            conn,
+            sub.clone(),
+            sy.clone(),
+            "sec-1".into(),
+            "2026-02-01".into(),
+            Some("Intro".into()),
+        )
+        .unwrap();
+        let lecture: String = conn
+            .query_row("SELECT id FROM lectures", [], |r| r.get(0))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO attendance (id, lecture_id, enrollment_id, status)
+             VALUES ('at-a', ?1, 'enr-a', 'present'), ('at-b', ?1, 'enr-b', 'late')",
+            rusqlite::params![lecture],
+        )
+        .unwrap();
+        (sy, sub)
+    }
+
+    #[test]
+    fn section_excel_full_section_has_expected_header_and_cells() {
+        let conn = test_utils::test_conn();
+        seed_section_workbook(&conn);
+        let (header, body) = section_workbook_rows(&conn, "sec-1").unwrap();
+        assert_eq!(
+            header,
+            vec![
+                "id",
+                "name",
+                "phone",
+                "email",
+                "Lecture 1: Intro (2026-02-01)",
+                "Quiz 1: Quiz 1 (max 10)",
+                "Assignment 1: HW 1 (max 20)",
+            ]
+        );
+        assert_eq!(body.len(), 2);
+        // Ordered by name: Alice first.
+        assert_eq!(
+            body[0],
+            vec!["42", "Alice", "0100", "", "present", "8", "15"]
+        );
+        assert_eq!(body[1][0], "");
+        assert_eq!(body[1][1], "Bob");
+        assert_eq!(body[1][4], "late");
+        assert_eq!(body[1][5], "");
+        assert_eq!(body[1][6], "");
+    }
+
+    #[test]
+    fn section_excel_empty_section_has_base_columns_only() {
+        // Basic scenario: no lectures, quizzes, or assignments at all.
+        let conn = test_utils::test_conn();
+        test_utils::seed_basic_scenario(&conn);
+        let (header, body) = section_workbook_rows(&conn, "sec-1").unwrap();
+        assert_eq!(header, vec!["id", "name", "phone", "email"]);
+        assert_eq!(body.len(), 2);
+        assert_eq!(body[0].len(), 4);
+    }
+
+    #[test]
+    fn section_excel_impl_returns_bytes_and_rejects_unknown_section() {
+        let conn = test_utils::test_conn();
+        let (sy, sub) = seed_section_workbook(&conn);
+        let (name, bytes) = export_section_excel_impl(&conn, &sy, &sub, "sec-1").unwrap();
+        assert_eq!(name, "Group A");
+        // A real xlsx is a zip archive — PK magic + non-trivial size.
+        assert!(bytes.len() > 1000, "bytes: {}", bytes.len());
+        assert_eq!(&bytes[0..2], b"PK");
+        let err = export_section_excel_impl(&conn, &sy, &sub, "sec-nope").unwrap_err();
+        assert!(err.contains("not part of"), "{err}");
+    }
+
+    #[test]
+    fn sanitize_sheet_name_replaces_illegal_chars_and_caps_length() {
+        assert_eq!(sanitize_sheet_name("Group A"), "Group A");
+        assert_eq!(sanitize_sheet_name("A:B/C\\D*E?F[G]"), "A_B_C_D_E_F_G_");
+        assert_eq!(sanitize_sheet_name("   "), "Section");
+        let long = "x".repeat(50);
+        assert_eq!(sanitize_sheet_name(&long).chars().count(), 31);
+    }
+
+    #[test]
+    fn lecture_column_label_falls_back_to_date_without_title() {
+        let dated = SectionLecture {
+            id: "l1".into(),
+            title: None,
+            date: "2026-02-01".into(),
+        };
+        assert_eq!(lecture_column_label(0, &dated), "Lecture 1 (2026-02-01)");
+        let blank = SectionLecture {
+            id: "l2".into(),
+            title: Some("  ".into()),
+            date: "2026-02-02".into(),
+        };
+        assert_eq!(lecture_column_label(1, &blank), "Lecture 2 (2026-02-02)");
     }
 }
