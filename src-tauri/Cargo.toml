@@ -1,6 +1,6 @@
 [package]
 name = "ta-assistant"
-version = "1.4.0"
+version = "1.4.1"
 description = "A local-first TA assistant desktop app"
 authors = ["Abdullah (PandaX185)"]
 edition = "2021"
@@ -31,6 +31,7 @@ argon2 = "0.5"
 rand_core = { version = "0.6", features = ["getrandom"] }
 uuid = { version = "1", features = ["v4"] }
 rust_xlsxwriter = "0.99.1"
+calamine = "0.36.1"
 
 # Desktop-only: the global-hotkey crate underneath has no Android/iOS support.
 # Gated here (real target cfgs — cfg(desktop) is invisible to Cargo's resolver)

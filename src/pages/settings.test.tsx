@@ -367,6 +367,138 @@ describe("Settings", () => {
     expect(await screen.findByText(/\.xlsx/)).toBeInTheDocument();
   });
 
+  it("imports excel directly when the preview has no duplicates", async () => {
+    mockInvoke();
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_semester_years") return Promise.resolve(semesterYears);
+      if (cmd === "get_subjects") return Promise.resolve(subjects);
+      if (cmd === "get_sections") return Promise.resolve(sections);
+      if (cmd === "preview_section_excel_import")
+        return Promise.resolve({ auto_count: 2, duplicates: [], errors: [] });
+      if (cmd === "import_section_excel")
+        return Promise.resolve({
+          created: 2,
+          matched: 0,
+          skipped: [],
+          errors: [],
+        });
+      return Promise.resolve(undefined);
+    });
+    useFilterStore.setState({
+      semesterYears,
+      subjects,
+      sections,
+      selectedSemesterYearId: "sy-1",
+      selectedSubjectId: "sub-1",
+      selectedSectionId: "sec-1",
+      loaded: true,
+    });
+    vi.mocked(openDialog).mockResolvedValue("/tmp/roster.xlsx");
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await openTab(user, "Data");
+    await user.click(
+      await screen.findByRole("button", { name: "Import Excel…" })
+    );
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("preview_section_excel_import", {
+        semesterYearId: "sy-1",
+        subjectId: "sub-1",
+        sectionId: "sec-1",
+        filePath: "/tmp/roster.xlsx",
+      })
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("import_section_excel", {
+        semesterYearId: "sy-1",
+        subjectId: "sub-1",
+        sectionId: "sec-1",
+        filePath: "/tmp/roster.xlsx",
+        resolutions: [],
+      })
+    );
+    // No resolution dialog when there is nothing to decide.
+    expect(screen.queryByText("Resolve duplicates")).not.toBeInTheDocument();
+  });
+
+  it("prompts per duplicate and imports with the chosen resolutions", async () => {
+    mockInvoke();
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_semester_years") return Promise.resolve(semesterYears);
+      if (cmd === "get_subjects") return Promise.resolve(subjects);
+      if (cmd === "get_sections") return Promise.resolve(sections);
+      if (cmd === "preview_section_excel_import")
+        return Promise.resolve({
+          auto_count: 1,
+          duplicates: [
+            {
+              row_no: 2,
+              incoming_name: "Nadia F.",
+              incoming_student_id: "42",
+              incoming_email: "new@x.com",
+              incoming_phone: null,
+              existing: {
+                id: "stu-x",
+                name: "Nadia Fawzy",
+                student_id: "42",
+                email: "old@x.com",
+                phone: null,
+              },
+            },
+          ],
+          errors: [],
+        });
+      if (cmd === "import_section_excel")
+        return Promise.resolve({
+          created: 1,
+          matched: 1,
+          skipped: [],
+          errors: [],
+        });
+      return Promise.resolve(undefined);
+    });
+    useFilterStore.setState({
+      semesterYears,
+      subjects,
+      sections,
+      selectedSemesterYearId: "sy-1",
+      selectedSubjectId: "sub-1",
+      selectedSectionId: "sec-1",
+      loaded: true,
+    });
+    vi.mocked(openDialog).mockResolvedValue("/tmp/roster.xlsx");
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await openTab(user, "Data");
+    await user.click(
+      await screen.findByRole("button", { name: "Import Excel…" })
+    );
+
+    // The resolution dialog lists the duplicate with both sides.
+    await screen.findByText("Resolve duplicates");
+    expect(screen.getByText(/Nadia Fawzy/)).toBeInTheDocument();
+    expect(screen.getByText(/old@x\.com/)).toBeInTheDocument();
+
+    // Default is Ignore; switch this row to Replace and confirm.
+    await user.click(screen.getByRole("button", { name: "Replace" }));
+    await user.click(
+      screen.getByRole("button", { name: "Import with these choices" })
+    );
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("import_section_excel", {
+        semesterYearId: "sy-1",
+        subjectId: "sub-1",
+        sectionId: "sec-1",
+        filePath: "/tmp/roster.xlsx",
+        resolutions: [{ row_no: 2, replace: true }],
+      })
+    );
+  });
+
   it("creates a backup at a user-chosen path", async () => {
     mockInvoke();
     vi.mocked(saveDialog).mockResolvedValue("/tmp/markbook-backup.json");

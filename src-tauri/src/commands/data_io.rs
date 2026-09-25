@@ -23,6 +23,7 @@
 //! tauri-apps/plugins-workspace#3356).
 
 use crate::commands::students::{create_enrollment_impl, create_student_impl, delete_student_impl};
+use calamine::Reader as _;
 use rusqlite::types::ValueRef;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -381,6 +382,453 @@ fn import_csv_impl(
         }
     }
     Ok(report)
+}
+
+// ---------------------------------------------------------------------------
+// Import: section workbook (xlsx)
+// ---------------------------------------------------------------------------
+
+/// One parsed body row from the sheet. `row_no` is the 1-based sheet row so
+/// every message points the teacher at the exact Excel row.
+#[derive(Debug)]
+struct SheetRow {
+    row_no: usize,
+    name: Option<String>,
+    student_id: Option<String>,
+    email: Option<String>,
+    phone: Option<String>,
+}
+
+/// A known header name → which identity column it fills.
+enum SheetColumn {
+    Name,
+    Id,
+    Email,
+    Phone,
+}
+
+fn sheet_column_kind(cell: &str) -> Option<SheetColumn> {
+    match cell.trim().to_lowercase().as_str() {
+        "name" => Some(SheetColumn::Name),
+        "id" | "student_id" | "student id" | "studentid" | "code" => Some(SheetColumn::Id),
+        "email" | "e-mail" | "mail" => Some(SheetColumn::Email),
+        "phone" | "mobile" | "tel" | "telephone" => Some(SheetColumn::Phone),
+        _ => None,
+    }
+}
+
+/// Render one worksheet cell as import text. Numbers lose Excel formatting —
+/// a phone stored as `100` reads back as `"100"` (leading zeros are already
+/// gone in the file itself, which no importer can recover).
+fn sheet_cell_text(cell: &calamine::Data) -> Option<String> {
+    let text = match cell {
+        calamine::Data::Empty => return None,
+        calamine::Data::String(s) => s.trim().to_string(),
+        calamine::Data::Int(n) => n.to_string(),
+        calamine::Data::Float(f) => fmt_score(*f),
+        calamine::Data::Bool(b) => b.to_string(),
+        calamine::Data::DateTime(dt) => dt.to_string(),
+        calamine::Data::DateTimeIso(s) | calamine::Data::DurationIso(s) => s.clone(),
+        calamine::Data::Error(_) => return None,
+    };
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+fn sheet_cell(row: &[calamine::Data], i: usize) -> Option<String> {
+    row.get(i).and_then(sheet_cell_text)
+}
+
+/// Parse the first worksheet of an .xlsx byte buffer into body rows.
+/// Header-based mapping: the first non-empty row is a header when any of its
+/// cells names a known column; otherwise rows fall back to CSV order
+/// (`name,id,email,phone`) for parity with the CSV import.
+fn parse_sheet_bytes(bytes: &[u8]) -> Result<Vec<SheetRow>, String> {
+    let mut workbook: calamine::Xlsx<_> =
+        calamine::open_workbook_from_rs(std::io::Cursor::new(bytes))
+            .map_err(|e| format!("Open Excel failed: {e}"))?;
+    let range = workbook
+        .worksheet_range_at(0)
+        .ok_or_else(|| "The workbook has no worksheets".to_string())
+        .map_err(|e| format!("Read worksheet failed: {e}"))?
+        .map_err(|e| format!("Read worksheet failed: {e}"))?;
+    let rows: Vec<&[calamine::Data]> = range
+        .rows()
+        .filter(|r| r.iter().any(|c| sheet_cell_text(c).is_some()))
+        .collect();
+    if rows.is_empty() {
+        return Err("The sheet is empty — nothing to import".into());
+    }
+
+    // Header detect + column positions (first occurrence of each kind wins).
+    let mut pos: [Option<usize>; 4] = [None, None, None, None]; // name,id,email,phone
+    let mut has_header = false;
+    for (i, raw) in rows[0].iter().enumerate() {
+        let text = match raw {
+            calamine::Data::String(s) => s.trim().to_string(),
+            _ => continue,
+        };
+        match sheet_column_kind(&text) {
+            Some(SheetColumn::Name) => {
+                has_header = true;
+                pos[0].get_or_insert(i);
+            }
+            Some(SheetColumn::Id) => {
+                has_header = true;
+                pos[1].get_or_insert(i);
+            }
+            Some(SheetColumn::Email) => {
+                has_header = true;
+                pos[2].get_or_insert(i);
+            }
+            Some(SheetColumn::Phone) => {
+                has_header = true;
+                pos[3].get_or_insert(i);
+            }
+            None => {}
+        }
+    }
+    if !has_header {
+        pos = [Some(0), Some(1), Some(2), Some(3)];
+    }
+
+    let mut out = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        if has_header && i == 0 {
+            continue;
+        }
+        let at = |p: Option<usize>| p.and_then(|c| sheet_cell(row, c));
+        out.push(SheetRow {
+            row_no: i + 1,
+            name: at(pos[0]),
+            student_id: at(pos[1]),
+            email: at(pos[2]),
+            phone: at(pos[3]),
+        });
+    }
+    Ok(out)
+}
+
+/// Stored details of one student, shown next to the incoming row when the
+/// teacher resolves a duplicate.
+#[derive(Serialize, Debug, PartialEq, Clone)]
+pub struct ExistingStudent {
+    pub id: String,
+    pub name: String,
+    pub student_id: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+}
+
+fn student_details(conn: &Connection, id: &str) -> Result<ExistingStudent, String> {
+    conn.query_row(
+        "SELECT id, name, student_id, email, phone FROM students WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(ExistingStudent {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                student_id: row.get(2)?,
+                email: row.get(3)?,
+                phone: row.get(4)?,
+            })
+        },
+    )
+    .map_err(|e| format!("student lookup failed: {e}"))
+}
+
+/// One sheet row that matched an existing student and needs a human decision.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct DuplicateRow {
+    pub row_no: usize,
+    pub incoming_name: String,
+    pub incoming_student_id: Option<String>,
+    pub incoming_email: Option<String>,
+    pub incoming_phone: Option<String>,
+    pub existing: ExistingStudent,
+}
+
+/// Read-only preview of an Excel import: rows that need no decision are
+/// counted, rows matching an existing (not-yet-enrolled) student are listed
+/// for per-row ignore/replace, and unusable rows are reported. Writes nothing.
+#[derive(Serialize, Debug, Default, PartialEq)]
+pub struct ExcelImportPreview {
+    pub auto_count: usize,
+    pub duplicates: Vec<DuplicateRow>,
+    pub errors: Vec<String>,
+}
+
+fn preview_sheet_rows(
+    conn: &Connection,
+    rows: &[SheetRow],
+    semester_year_id: &str,
+    subject_id: &str,
+) -> Result<ExcelImportPreview, String> {
+    let mut preview = ExcelImportPreview::default();
+    for row in rows {
+        let name = match row.name.as_deref().map(str::trim) {
+            Some(n) if !n.is_empty() => n.to_string(),
+            _ => {
+                preview
+                    .errors
+                    .push(format!("Row {}: missing name", row.row_no));
+                continue;
+            }
+        };
+        let matched = match_student(conn, &name, row.student_id.clone(), row.phone.clone())
+            .map_err(|e| format!("Row {}: {e}", row.row_no))?;
+        match matched {
+            Matched::NoMatch | Matched::Ambiguous(_) => preview.auto_count += 1,
+            Matched::Student(id) => {
+                let enrolled = already_enrolled(conn, &id, semester_year_id, subject_id)
+                    .map_err(|e| format!("Row {}: {e}", row.row_no))?;
+                if enrolled {
+                    preview.auto_count += 1;
+                } else {
+                    let existing = student_details(conn, &id)?;
+                    preview.duplicates.push(DuplicateRow {
+                        row_no: row.row_no,
+                        incoming_name: name,
+                        incoming_student_id: row.student_id.clone(),
+                        incoming_email: row.email.clone(),
+                        incoming_phone: row.phone.clone(),
+                        existing,
+                    });
+                }
+            }
+        }
+    }
+    Ok(preview)
+}
+
+/// Read the first worksheet of an .xlsx file (filesystem path or Android SAF
+/// URI) into body rows.
+fn read_sheet_rows(app: &AppHandle, file_path: &str) -> Result<Vec<SheetRow>, String> {
+    let bytes = read_input(app, file_path)?;
+    parse_sheet_bytes(&bytes)
+}
+
+/// Scope-checked preview over already-parsed rows. Kept free of `AppHandle`
+/// so unit tests can exercise the whole pipeline against an in-memory DB.
+fn preview_section_excel_impl(
+    conn: &Connection,
+    semester_year_id: &str,
+    subject_id: &str,
+    section_id: &str,
+    rows: &[SheetRow],
+) -> Result<ExcelImportPreview, String> {
+    ensure_section_scoped(conn, semester_year_id, subject_id, section_id)?;
+    preview_sheet_rows(conn, rows, semester_year_id, subject_id)
+}
+
+/// Read-only preview of an Excel roster import into one section.
+#[tauri::command]
+pub fn preview_section_excel_import(
+    app: AppHandle,
+    semester_year_id: String,
+    subject_id: String,
+    section_id: String,
+    file_path: String,
+) -> Result<ExcelImportPreview, String> {
+    let conn = crate::db::open_db(&app)?;
+    let rows = read_sheet_rows(&app, &file_path)?;
+    preview_section_excel_impl(&conn, &semester_year_id, &subject_id, &section_id, &rows)
+}
+
+/// Per-duplicate decision from the resolution dialog: `replace` overwrites
+/// the matched student's stored details before enrolling; anything else
+/// (including rows absent from the list) is ignored. Ignoring is the safe
+/// default — nothing is overwritten unless the teacher explicitly says so.
+#[derive(serde::Deserialize, Debug)]
+pub struct DuplicateResolution {
+    pub row_no: usize,
+    pub replace: bool,
+}
+
+/// Import one sheet row. Mirrors `import_one`, plus the replace branch for
+/// teacher-resolved duplicates: `replace` overwrites the matched student's
+/// stored details before enrolling; without it a row matching an existing
+/// not-yet-enrolled student is skipped as an ignored duplicate.
+#[allow(clippy::too_many_arguments)]
+fn import_sheet_row(
+    conn: &Connection,
+    row: &SheetRow,
+    replace: bool,
+    semester_year_id: &str,
+    subject_id: &str,
+    section_id: &str,
+    report: &mut ImportReport,
+) {
+    let name = match row.name.as_deref().map(str::trim) {
+        Some(n) if !n.is_empty() => n.to_string(),
+        _ => {
+            report
+                .errors
+                .push(format!("Row {}: missing name", row.row_no));
+            return;
+        }
+    };
+    let row_no = row.row_no;
+    let replace_details = |id: &str| -> Result<(), String> {
+        crate::commands::students::update_student_impl(
+            conn,
+            id.to_string(),
+            name.clone(),
+            row.email.clone(),
+            row.student_id.clone(),
+            row.phone.clone(),
+        )
+    };
+
+    let (id, created) = match match_student(conn, &name, row.student_id.clone(), row.phone.clone())
+    {
+        Ok(Matched::Student(id)) => (id, false),
+        Ok(Matched::Ambiguous(key)) => {
+            report.skipped.push(format!(
+                "Row {row_no}: {name} matches multiple students ({key})"
+            ));
+            return;
+        }
+        Ok(Matched::NoMatch) => {
+            match create_student_impl(
+                conn,
+                name.clone(),
+                row.email.clone(),
+                row.student_id.clone(),
+                row.phone.clone(),
+            ) {
+                Ok(id) => (id, true),
+                Err(e) => {
+                    report.errors.push(format!("Row {row_no}: {e}"));
+                    return;
+                }
+            }
+        }
+        Err(e) => {
+            report.errors.push(format!("Row {row_no}: {e}"));
+            return;
+        }
+    };
+
+    if !created {
+        match already_enrolled(conn, &id, semester_year_id, subject_id) {
+            Ok(true) => {
+                // Details are still replaced first when asked — the teacher
+                // decided the stored data is stale; only the second
+                // enrollment is skipped.
+                if replace {
+                    if let Err(e) = replace_details(&id) {
+                        report.errors.push(format!("Row {row_no}: {e}"));
+                        return;
+                    }
+                }
+                report.skipped.push(format!(
+                    "Row {row_no}: {name} is already enrolled in this subject"
+                ));
+                return;
+            }
+            Ok(false) => {
+                if replace {
+                    if let Err(e) = replace_details(&id) {
+                        report.errors.push(format!("Row {row_no}: {e}"));
+                        return;
+                    }
+                } else {
+                    report.skipped.push(format!(
+                        "Row {row_no}: {name} matches an existing student (duplicate ignored)"
+                    ));
+                    return;
+                }
+            }
+            Err(e) => {
+                report.errors.push(format!("Row {row_no}: {e}"));
+                return;
+            }
+        }
+    }
+
+    if let Err(e) = create_enrollment_impl(
+        conn,
+        id.clone(),
+        semester_year_id.to_string(),
+        subject_id.to_string(),
+        section_id.to_string(),
+    ) {
+        if created {
+            let _ = delete_student_impl(conn, &id); // clean up our new student
+        }
+        report.errors.push(format!("Row {row_no}: {e}"));
+        return;
+    }
+
+    if created {
+        report.created += 1;
+    } else {
+        report.matched += 1;
+    }
+}
+
+/// Import an Excel roster into one section. Matching is CSV parity
+/// (`student_id` → phone → unique name, email never a key). Rows matching an
+/// existing not-yet-enrolled student are ignored unless the teacher resolved
+/// them with `replace: true` in the preview dialog — see
+/// [`preview_section_excel_import`].
+/// Scope-checked import over already-parsed rows. Kept free of `AppHandle` so
+/// unit tests can exercise the whole pipeline against an in-memory DB.
+fn import_section_excel_impl(
+    conn: &Connection,
+    semester_year_id: &str,
+    subject_id: &str,
+    section_id: &str,
+    rows: &[SheetRow],
+    resolutions: &[DuplicateResolution],
+) -> Result<ImportReport, String> {
+    ensure_section_scoped(conn, semester_year_id, subject_id, section_id)?;
+    if rows.is_empty() {
+        return Err("The sheet is empty — nothing to import".into());
+    }
+    let replace: std::collections::HashMap<usize, bool> =
+        resolutions.iter().map(|r| (r.row_no, r.replace)).collect();
+
+    let mut report = ImportReport::default();
+    for row in rows {
+        // Duplicates default to ignore: only an explicit replace proceeds.
+        let wants_replace = replace.get(&row.row_no).copied().unwrap_or(false);
+        import_sheet_row(
+            conn,
+            row,
+            wants_replace,
+            semester_year_id,
+            subject_id,
+            section_id,
+            &mut report,
+        );
+    }
+    Ok(report)
+}
+
+#[tauri::command]
+pub fn import_section_excel(
+    app: AppHandle,
+    semester_year_id: String,
+    subject_id: String,
+    section_id: String,
+    file_path: String,
+    resolutions: Vec<DuplicateResolution>,
+) -> Result<ImportReport, String> {
+    let conn = crate::db::open_db(&app)?;
+    let rows = read_sheet_rows(&app, &file_path)?;
+    import_section_excel_impl(
+        &conn,
+        &semester_year_id,
+        &subject_id,
+        &section_id,
+        &rows,
+        &resolutions,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1932,6 +2380,231 @@ mod tests {
         assert_eq!(sanitize_sheet_name("   "), "Section");
         let long = "x".repeat(50);
         assert_eq!(sanitize_sheet_name(&long).chars().count(), 31);
+    }
+
+    // ----- Section workbook import (xlsx) -----
+
+    enum FixtureCell<'a> {
+        Text(&'a str),
+        Num(f64),
+    }
+
+    /// Render fixture rows to an in-memory .xlsx buffer (no binary fixtures).
+    fn workbook_bytes(rows: &[Vec<FixtureCell>]) -> Vec<u8> {
+        use rust_xlsxwriter::Workbook;
+        let mut workbook = Workbook::new();
+        let sheet = workbook.add_worksheet();
+        for (r, row) in rows.iter().enumerate() {
+            for (c, cell) in row.iter().enumerate() {
+                match cell {
+                    FixtureCell::Text(s) => sheet
+                        .write_string(r as u32, c as u16, *s)
+                        .expect("write cell"),
+                    FixtureCell::Num(n) => sheet
+                        .write_number(r as u32, c as u16, *n)
+                        .expect("write cell"),
+                };
+            }
+        }
+        workbook.save_to_buffer().expect("render workbook")
+    }
+
+    fn text_cells<'a>(row: &'a [&'a str]) -> Vec<FixtureCell<'a>> {
+        row.iter().map(|s| FixtureCell::Text(s)).collect()
+    }
+
+    #[test]
+    fn sheet_header_mapping_accepts_any_order_and_aliases() {
+        use FixtureCell::Text;
+        let bytes = workbook_bytes(&[
+            text_cells(&["phone", "Student ID", "email", "name"]),
+            vec![Text("0100"), Text("42"), Text("a@x.com"), Text("Alice New")],
+        ]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].row_no, 2);
+        assert_eq!(rows[0].name.as_deref(), Some("Alice New"));
+        assert_eq!(rows[0].student_id.as_deref(), Some("42"));
+        assert_eq!(rows[0].email.as_deref(), Some("a@x.com"));
+        assert_eq!(rows[0].phone.as_deref(), Some("0100"));
+    }
+
+    #[test]
+    fn sheet_falls_back_to_csv_order_without_header() {
+        let bytes = workbook_bytes(&[text_cells(&["Omar Ali", "900", "o@x.com", "0111"])]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].name.as_deref(), Some("Omar Ali"));
+        assert_eq!(rows[0].student_id.as_deref(), Some("900"));
+        assert_eq!(rows[0].email.as_deref(), Some("o@x.com"));
+        assert_eq!(rows[0].phone.as_deref(), Some("0111"));
+    }
+
+    #[test]
+    fn sheet_numeric_cells_stringify_and_blank_rows_drop() {
+        use FixtureCell::{Num, Text};
+        let bytes = workbook_bytes(&[
+            text_cells(&["name", "id", "email", "phone"]),
+            vec![Text("Lina"), Num(77.0), Text(""), Num(100.0)],
+            vec![], // fully empty row
+        ]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].student_id.as_deref(), Some("77"));
+        assert_eq!(rows[0].phone.as_deref(), Some("100"));
+        assert_eq!(rows[0].email, None);
+    }
+
+    #[test]
+    fn sheet_empty_workbook_errors() {
+        let bytes = workbook_bytes(&[]);
+        let err = parse_sheet_bytes(&bytes).unwrap_err();
+        assert!(err.contains("empty"), "{err}");
+    }
+
+    #[test]
+    fn excel_preview_lists_duplicate_with_both_sides() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        // Bob exists (unenrolled-new? no — Bob IS enrolled in sec-1).
+        // Use a fresh student enrolled nowhere: create Nadia, no enrollment.
+        crate::commands::students::create_student_impl(
+            &conn,
+            "Nadia Fawzy".into(),
+            Some("old@x.com".into()),
+            Some("42".into()),
+            None,
+        )
+        .unwrap();
+        let bytes = workbook_bytes(&[
+            text_cells(&["id", "name", "phone", "email"]),
+            text_cells(&["42", "Nadia F.", "", "new@x.com"]),
+            text_cells(&["", "Alice", "", ""]),
+        ]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        let preview = preview_section_excel_impl(&conn, &sy, &sub, "sec-1", &rows).unwrap();
+        assert!(preview.errors.is_empty());
+        // Nadia: duplicate needing a decision. Alice: already enrolled → auto.
+        assert_eq!(preview.auto_count, 1);
+        assert_eq!(preview.duplicates.len(), 1);
+        let dup = &preview.duplicates[0];
+        assert_eq!(dup.row_no, 2);
+        assert_eq!(dup.incoming_email.as_deref(), Some("new@x.com"));
+        assert_eq!(dup.existing.name, "Nadia Fawzy");
+        assert_eq!(dup.existing.email.as_deref(), Some("old@x.com"));
+    }
+
+    #[test]
+    fn excel_import_replace_updates_then_enrolls() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        crate::commands::students::create_student_impl(
+            &conn,
+            "Nadia Fawzy".into(),
+            Some("old@x.com".into()),
+            Some("42".into()),
+            None,
+        )
+        .unwrap();
+        let bytes = workbook_bytes(&[
+            text_cells(&["id", "name", "phone", "email"]),
+            text_cells(&["42", "Nadia F.", "0100", "new@x.com"]),
+            text_cells(&["", "Omar Ali", "", ""]),
+        ]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        let report = import_section_excel_impl(
+            &conn,
+            &sy,
+            &sub,
+            "sec-1",
+            &rows,
+            &[DuplicateResolution {
+                row_no: 2,
+                replace: true,
+            }],
+        )
+        .unwrap();
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(report.created, 1); // Omar
+        assert_eq!(report.matched, 1); // Nadia, details replaced
+        let stored: String = conn
+            .query_row(
+                "SELECT email FROM students WHERE student_id = '42'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, "new@x.com");
+        assert_eq!(
+            count(
+                &conn,
+                "SELECT COUNT(*) FROM enrollments WHERE section_id = 'sec-1'"
+            ),
+            4
+        );
+    }
+
+    #[test]
+    fn excel_import_ignore_is_default_and_never_duplicates() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        crate::commands::students::create_student_impl(
+            &conn,
+            "Nadia Fawzy".into(),
+            None,
+            Some("42".into()),
+            None,
+        )
+        .unwrap();
+        let bytes = workbook_bytes(&[
+            text_cells(&["id", "name", "phone", "email"]),
+            text_cells(&["42", "Nadia F.", "", ""]),
+        ]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        // No resolutions at all → duplicate ignored, nothing enrolled.
+        let report = import_section_excel_impl(&conn, &sy, &sub, "sec-1", &rows, &[]).unwrap();
+        assert_eq!(report.created, 0);
+        assert_eq!(report.matched, 0);
+        assert_eq!(report.skipped.len(), 1);
+        assert!(
+            report.skipped[0].contains("duplicate ignored"),
+            "{report:?}"
+        );
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM students"), 3);
+        assert_eq!(
+            count(
+                &conn,
+                "SELECT COUNT(*) FROM enrollments WHERE section_id = 'sec-1'"
+            ),
+            2
+        );
+    }
+
+    #[test]
+    fn excel_import_already_enrolled_row_skips() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        let bytes = workbook_bytes(&[
+            text_cells(&["id", "name", "phone", "email"]),
+            text_cells(&["", "Alice", "", ""]),
+        ]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        let preview = preview_section_excel_impl(&conn, &sy, &sub, "sec-1", &rows).unwrap();
+        assert!(preview.duplicates.is_empty());
+        assert_eq!(preview.auto_count, 1);
+        let report = import_section_excel_impl(&conn, &sy, &sub, "sec-1", &rows, &[]).unwrap();
+        assert_eq!(report.skipped.len(), 1);
+        assert!(report.skipped[0].contains("already enrolled"), "{report:?}");
+    }
+
+    #[test]
+    fn excel_import_unknown_section_errors() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        let bytes = workbook_bytes(&[text_cells(&["", "Omar", "", ""])]);
+        let rows = parse_sheet_bytes(&bytes).unwrap();
+        let err = import_section_excel_impl(&conn, &sy, &sub, "sec-nope", &rows, &[]).unwrap_err();
+        assert!(err.contains("not part of"), "{err}");
     }
 
     #[test]

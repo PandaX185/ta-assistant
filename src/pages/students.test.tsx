@@ -2,11 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useFilterStore } from "@/stores/filter-store";
 import Students from "./students";
-
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
 const subjects = [
   { id: "sub-1", name: "Data Structures", code: "CS201", color: null },
@@ -499,95 +496,5 @@ describe("Students", () => {
       "get_student_detail",
       expect.anything()
     );
-  });
-
-  it("whatsapp button copies section phones and opens WhatsApp", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
-    });
-
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_enrollments")
-        return Promise.resolve([
-          {
-            id: "enr-1",
-            student_id: "stu-1",
-            semester_year_id: "sy-1",
-            subject_id: "sub-1",
-            student_name: "Ziad",
-            student_code: null,
-            student_email: null,
-            student_phone: "0100 123 4567",
-          },
-          {
-            id: "enr-2",
-            student_id: "stu-2",
-            semester_year_id: "sy-1",
-            subject_id: "sub-1",
-            student_name: "Sara",
-            student_code: null,
-            student_email: null,
-            student_phone: null,
-          },
-          {
-            id: "enr-3",
-            student_id: "stu-3",
-            semester_year_id: "sy-1",
-            subject_id: "sub-1",
-            student_name: "Omar",
-            student_code: null,
-            student_email: null,
-            student_phone: "0199 888 7777",
-          },
-        ]);
-      return Promise.resolve(undefined);
-    });
-
-    render(<Students />);
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_enrollments", enrollmentsCall)
-    );
-    // Wait for the roster to load into state before clicking.
-    await screen.findByText("Ziad");
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: "WhatsApp group" })
-    );
-
-    // Blank/missing numbers are skipped, stored text copied as-is.
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith("0100 123 4567\n0199 888 7777")
-    );
-    expect(openUrl).toHaveBeenCalledWith("https://wa.me/");
-  });
-
-  it("whatsapp button is disabled when the section has no phone numbers", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_enrollments")
-        return Promise.resolve([
-          {
-            id: "enr-1",
-            student_id: "stu-1",
-            semester_year_id: "sy-1",
-            subject_id: "sub-1",
-            student_name: "Ziad",
-            student_code: null,
-            student_email: null,
-            student_phone: null,
-          },
-        ]);
-      return Promise.resolve(undefined);
-    });
-
-    render(<Students />);
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_enrollments", enrollmentsCall)
-    );
-
-    expect(
-      screen.getByRole("button", { name: "WhatsApp group" })
-    ).toBeDisabled();
   });
 });

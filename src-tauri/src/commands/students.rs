@@ -140,7 +140,7 @@ pub fn update_student(
     update_student_impl(&conn, id, name, email, student_id, phone)
 }
 
-fn update_student_impl(
+pub(crate) fn update_student_impl(
     conn: &Connection,
     id: String,
     name: String,

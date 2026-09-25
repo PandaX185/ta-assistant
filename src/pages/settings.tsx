@@ -34,6 +34,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -765,6 +767,27 @@ interface RestoreSummary {
   rows_restored: number;
 }
 
+interface ExcelDuplicate {
+  row_no: number;
+  incoming_name: string;
+  incoming_student_id: string | null;
+  incoming_email: string | null;
+  incoming_phone: string | null;
+  existing: {
+    id: string;
+    name: string;
+    student_id: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+}
+
+interface ExcelPreview {
+  auto_count: number;
+  duplicates: ExcelDuplicate[];
+  errors: string[];
+}
+
 function DataSection() {
   const { t } = useTranslation();
   const {
@@ -782,6 +805,12 @@ function DataSection() {
   const [report, setReport] = useState<ImportReport | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [excelPreview, setExcelPreview] = useState<
+    (ExcelPreview & { filePath: string }) | null
+  >(null);
+  const [excelDecisions, setExcelDecisions] = useState<Record<number, boolean>>(
+    {}
+  );
 
   const ready = Boolean(
     selectedSemesterYearId && selectedSubjectId && selectedSectionId
@@ -818,6 +847,67 @@ function DataSection() {
         setReport(rep);
       } finally {
         setImporting(false);
+      }
+    });
+
+  const handleImportExcel = () =>
+    run(async () => {
+      const path = await openDialog({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Excel", extensions: ["xlsx"] }],
+      });
+      if (!path) return;
+      setImporting(true);
+      try {
+        const preview = await invoke<ExcelPreview>(
+          "preview_section_excel_import",
+          {
+            semesterYearId: selectedSemesterYearId,
+            subjectId: selectedSubjectId,
+            sectionId: selectedSectionId,
+            filePath: path,
+          }
+        );
+        if (preview.duplicates.length === 0) {
+          const rep = await invoke<ImportReport>("import_section_excel", {
+            semesterYearId: selectedSemesterYearId,
+            subjectId: selectedSubjectId,
+            sectionId: selectedSectionId,
+            filePath: path,
+            resolutions: [],
+          });
+          setReport(rep);
+        } else {
+          setExcelDecisions(
+            Object.fromEntries(preview.duplicates.map((d) => [d.row_no, false]))
+          );
+          setExcelPreview({ ...preview, filePath: path });
+        }
+      } finally {
+        setImporting(false);
+      }
+    });
+
+  const handleConfirmExcelImport = () =>
+    run(async () => {
+      if (!excelPreview) return;
+      setImporting(true);
+      try {
+        const rep = await invoke<ImportReport>("import_section_excel", {
+          semesterYearId: selectedSemesterYearId,
+          subjectId: selectedSubjectId,
+          sectionId: selectedSectionId,
+          filePath: excelPreview.filePath,
+          resolutions: excelPreview.duplicates.map((d) => ({
+            row_no: d.row_no,
+            replace: !!excelDecisions[d.row_no],
+          })),
+        });
+        setReport(rep);
+      } finally {
+        setImporting(false);
+        setExcelPreview(null);
       }
     });
 
@@ -936,17 +1026,30 @@ function DataSection() {
             {t("settings.data_import_description")}
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleImport}
-          disabled={importing}
-        >
-          <FileUp />
-          {importing
-            ? t("settings.data_importing")
-            : t("settings.data_import_button")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleImport}
+            disabled={importing}
+          >
+            <FileUp />
+            {importing
+              ? t("settings.data_importing")
+              : t("settings.data_import_button")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleImportExcel}
+            disabled={importing}
+          >
+            <FileUp />
+            {importing
+              ? t("settings.data_importing")
+              : t("settings.data_import_excel")}
+          </Button>
+        </div>
         {report && (
           <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
             <p className="font-medium">{t("settings.data_report_title")}</p>
@@ -963,6 +1066,133 @@ function DataSection() {
             )}
           </div>
         )}
+        <Dialog
+          open={excelPreview !== null}
+          onOpenChange={(v) => {
+            if (!v) setExcelPreview(null);
+          }}
+        >
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                {t("settings.data_excel_duplicates_title")}
+              </DialogTitle>
+              <DialogDescription>
+                {t("settings.data_excel_duplicates_desc", {
+                  count: excelPreview?.duplicates.length ?? 0,
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            {excelPreview && excelPreview.auto_count > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {t("settings.data_excel_auto", {
+                  count: excelPreview.auto_count,
+                })}
+              </p>
+            )}
+            <div className="max-h-80 space-y-3 overflow-y-auto">
+              {excelPreview?.duplicates.map((d) => {
+                const replace = !!excelDecisions[d.row_no];
+                return (
+                  <div key={d.row_no} className="rounded-md border p-3 text-sm">
+                    <p className="font-medium">
+                      {t("settings.data_excel_row", { n: d.row_no })} ·{" "}
+                      {d.incoming_name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t("settings.data_excel_incoming")}:{" "}
+                      {[
+                        d.incoming_student_id,
+                        d.incoming_phone,
+                        d.incoming_email,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.data_excel_stored")}:{" "}
+                      {[
+                        d.existing.name,
+                        d.existing.student_id,
+                        d.existing.phone,
+                        d.existing.email,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        size="sm"
+                        variant={replace ? "outline" : "default"}
+                        onClick={() =>
+                          setExcelDecisions((prev) => ({
+                            ...prev,
+                            [d.row_no]: false,
+                          }))
+                        }
+                      >
+                        {t("settings.data_excel_ignore")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={replace ? "default" : "outline"}
+                        onClick={() =>
+                          setExcelDecisions((prev) => ({
+                            ...prev,
+                            [d.row_no]: true,
+                          }))
+                        }
+                      >
+                        {t("settings.data_excel_replace")}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <DialogFooter className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setExcelDecisions(
+                    Object.fromEntries(
+                      (excelPreview?.duplicates ?? []).map((d) => [
+                        d.row_no,
+                        false,
+                      ])
+                    )
+                  )
+                }
+              >
+                {t("settings.data_excel_ignore_all")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setExcelDecisions(
+                    Object.fromEntries(
+                      (excelPreview?.duplicates ?? []).map((d) => [
+                        d.row_no,
+                        true,
+                      ])
+                    )
+                  )
+                }
+              >
+                {t("settings.data_excel_replace_all")}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmExcelImport}
+                disabled={importing}
+              >
+                {t("settings.data_excel_confirm")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-lg border p-4 space-y-3">
