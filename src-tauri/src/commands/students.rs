@@ -99,6 +99,61 @@ fn get_students_impl(conn: &Connection) -> Result<Vec<Student>, String> {
     Ok(result)
 }
 
+/// Students with no enrollment row in the given section. Backs the
+/// "Not enrolled" tab so existing students can be enrolled without retyping.
+#[tauri::command]
+pub fn get_unenrolled_students(
+    app: AppHandle,
+    semester_year_id: String,
+    subject_id: String,
+    section_id: String,
+) -> Result<Vec<Student>, String> {
+    let conn = crate::db::open_db(&app)?;
+    get_unenrolled_students_impl(&conn, semester_year_id, subject_id, section_id)
+}
+
+fn get_unenrolled_students_impl(
+    conn: &Connection,
+    semester_year_id: String,
+    subject_id: String,
+    section_id: String,
+) -> Result<Vec<Student>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, email, student_id, phone FROM students s
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM enrollments e
+                 WHERE e.student_id = s.id
+                   AND e.semester_year_id = ?1
+                   AND e.subject_id = ?2
+                   AND e.section_id = ?3
+             )
+             ORDER BY name",
+        )
+        .map_err(|e| format!("Query prepare failed: {e}"))?;
+
+    let rows = stmt
+        .query_map(
+            rusqlite::params![semester_year_id, subject_id, section_id],
+            |row| {
+                Ok(Student {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    email: row.get(2)?,
+                    student_id: row.get(3)?,
+                    phone: row.get(4)?,
+                })
+            },
+        )
+        .map_err(|e| format!("Query failed: {e}"))?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| format!("Row failed: {e}"))?);
+    }
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn create_student(
     app: AppHandle,
@@ -516,6 +571,38 @@ mod tests {
         let enr = get_enrollments_impl(&conn, sy, sub, "sec-1".into()).unwrap();
         assert_eq!(enr.len(), 1);
         assert_eq!(enr[0].student_name, "Bob");
+    }
+
+    #[test]
+    fn unenrolled_excludes_only_this_section() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        // Charlie exists but is enrolled nowhere; Dana is enrolled in sec-2 only.
+        test_utils::seed_student(&conn, "stu-c", "Charlie");
+        test_utils::seed_student(&conn, "stu-d", "Dana");
+        conn.execute(
+            "INSERT INTO sections (id, subject_id, semester_year_id, name, color)
+             VALUES ('sec-2', ?1, ?2, 'Group B', NULL)",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id)
+             VALUES ('enr-d2', 'stu-d', ?1, ?2, 'sec-2')",
+            rusqlite::params![sy, sub],
+        )
+        .unwrap();
+
+        let unenrolled =
+            get_unenrolled_students_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
+        let names: Vec<&str> = unenrolled.iter().map(|s| s.name.as_str()).collect();
+        // Alice/Bob are in sec-1 → excluded. Charlie (nowhere) and Dana
+        // (sec-2 only) are both enrollable into sec-1.
+        assert_eq!(names, vec!["Charlie", "Dana"]);
+
+        let unenrolled_sec2 = get_unenrolled_students_impl(&conn, sy, sub, "sec-2".into()).unwrap();
+        let names2: Vec<&str> = unenrolled_sec2.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names2, vec!["Alice", "Bob", "Charlie"]);
     }
 
     #[test]

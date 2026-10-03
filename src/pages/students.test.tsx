@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { useFilterStore } from "@/stores/filter-store";
@@ -456,6 +462,129 @@ describe("Students", () => {
 
     expect(screen.queryByText("Ziad")).not.toBeInTheDocument();
     expect(screen.getByText("Sara")).toBeInTheDocument();
+  });
+
+  it("deletes a student from the row after confirmation", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_enrollments")
+        return Promise.resolve([
+          {
+            id: "enr-1",
+            student_id: "stu-1",
+            semester_year_id: "sy-1",
+            subject_id: "sub-1",
+            student_name: "Ziad",
+            student_code: "2026-0077",
+            student_email: null,
+            student_phone: null,
+          },
+        ]);
+      if (cmd === "get_unenrolled_students") return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+
+    const user = userEvent.setup();
+    render(<Students />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_enrollments", enrollmentsCall)
+    );
+
+    // One Delete button (the row's); the confirm dialog is not open yet.
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Delete Student?")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("delete_student", { id: "stu-1" })
+    );
+    // Both lists reload after the delete.
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(invoke)
+          .mock.calls.filter(([cmd]) => cmd === "get_enrollments")
+      ).toHaveLength(2)
+    );
+  });
+
+  it("shows the not-enrolled tab and enrolls from it", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_enrollments")
+        return Promise.resolve([
+          {
+            id: "enr-1",
+            student_id: "stu-1",
+            semester_year_id: "sy-1",
+            subject_id: "sub-1",
+            student_name: "Ziad",
+            student_code: null,
+            student_email: null,
+            student_phone: null,
+          },
+        ]);
+      if (cmd === "get_unenrolled_students")
+        return Promise.resolve([
+          {
+            id: "stu-2",
+            name: "Sara",
+            email: null,
+            student_id: "2026-0099",
+            phone: null,
+          },
+        ]);
+      return Promise.resolve(undefined);
+    });
+
+    const user = userEvent.setup();
+    render(<Students />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "get_unenrolled_students",
+        enrollmentsCall
+      )
+    );
+
+    // Enrolled tab first: Ziad visible, Sara not.
+    expect(screen.getByText("Ziad")).toBeInTheDocument();
+    expect(screen.queryByText("Sara")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Not enrolled" }));
+
+    await waitFor(() => expect(screen.getByText("Sara")).toBeInTheDocument());
+    expect(screen.queryByText("Ziad")).not.toBeInTheDocument();
+    expect(screen.getByText("1 student not enrolled")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Enroll" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("create_enrollment", {
+        studentId: "stu-2",
+        ...enrollmentsCall,
+      })
+    );
+  });
+
+  it("shows an all-enrolled empty state when nobody is unenrolled", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_enrollments") return Promise.resolve([]);
+      if (cmd === "get_unenrolled_students") return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+
+    const user = userEvent.setup();
+    render(<Students />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "get_unenrolled_students",
+        enrollmentsCall
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: "Not enrolled" }));
+    expect(
+      await screen.findByText("Everyone is enrolled in this section.")
+    ).toBeInTheDocument();
   });
 
   it("copy button invokes clipboard with the phone number", async () => {

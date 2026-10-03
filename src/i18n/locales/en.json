@@ -154,6 +154,12 @@
     "match_other": "{{count}} matches",
     "no_students_match": "No students match your search.",
     "no_students_yet": "No students enrolled yet. Add your first student above.",
+    "tab_enrolled": "Enrolled",
+    "tab_unenrolled": "Not enrolled",
+    "unenrolled_one": "{{count}} student not enrolled",
+    "unenrolled_other": "{{count}} students not enrolled",
+    "no_unenrolled": "Everyone is enrolled in this section.",
+    "enroll": "Enroll",
     "delete_student": "Delete Student?",
     "delete_student_desc_1": "This will permanently delete",
     "delete_student_desc_2": "and all their grades, attendance records, and bonuses. This cannot be undone."

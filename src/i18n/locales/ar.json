@@ -154,6 +154,12 @@
     "match_other": "{{count}} نتائج",
     "no_students_match": "مفيش طلاب مطابقين لبحثك.",
     "no_students_yet": "لسه مفيش طلاب مسجلين. ضيف أول طالب",
+    "tab_enrolled": "المسجلون",
+    "tab_unenrolled": "غير المسجلين",
+    "unenrolled_one": "طالب واحد غير مسجل",
+    "unenrolled_other": "{{count}} طلاب غير مسجلين",
+    "no_unenrolled": "كل الطلاب مسجلين في المجموعة دي.",
+    "enroll": "سجّل",
     "delete_student": "حذف الطالب؟",
     "delete_student_desc_1": "هيتم حذف",
     "delete_student_desc_2": "بشكل نهائي مع كل درجاته وسجلات الحضور بتاعته. مفيش تراجع."

@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Users, ClipboardList, Copy, Check } from "lucide-react";
+import { Users, ClipboardList, Copy, Check, Trash2 } from "lucide-react";
 import { useFilterStore } from "@/stores/filter-store";
 import { StudentDetailDialog } from "@/components/students/student-detail-dialog";
 import { useCopyFeedback } from "@/lib/use-copy-feedback";
@@ -59,6 +59,8 @@ export default function Students() {
   } = useFilterStore();
 
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
+  const [unenrolled, setUnenrolled] = useState<StudentMatch[]>([]);
+  const [tab, setTab] = useState<"enrolled" | "unenrolled">("enrolled");
   const [search, setSearch] = useState("");
 
   // Add/Edit dialog
@@ -109,9 +111,31 @@ export default function Students() {
     }
   }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
 
-  useEffect(() => {
+  const loadUnenrolled = useCallback(async () => {
+    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
+      setUnenrolled([]);
+      return;
+    }
+    try {
+      const data = await invoke<StudentMatch[]>("get_unenrolled_students", {
+        semesterYearId: selectedSemesterYearId,
+        subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
+      });
+      setUnenrolled(data ?? []);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
+
+  const reloadLists = useCallback(() => {
     loadEnrollments();
-  }, [loadEnrollments]);
+    loadUnenrolled();
+  }, [loadEnrollments, loadUnenrolled]);
+
+  useEffect(() => {
+    reloadLists();
+  }, [reloadLists]);
 
   const resetForm = () => {
     setName("");
@@ -150,7 +174,7 @@ export default function Students() {
     setMatches([]);
     resetForm();
     setOpen(false);
-    loadEnrollments();
+    reloadLists();
   };
 
   const useExistingStudent = async (existingId: string) => {
@@ -166,7 +190,24 @@ export default function Students() {
       setMatches([]);
       resetForm();
       setOpen(false);
-      loadEnrollments();
+      reloadLists();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Enroll a student straight from the "Not enrolled" tab.
+  const enrollFromTab = async (existingId: string) => {
+    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId)
+      return;
+    try {
+      await invoke("create_enrollment", {
+        studentId: existingId,
+        semesterYearId: selectedSemesterYearId,
+        subjectId: selectedSubjectId,
+        sectionId: selectedSectionId,
+      });
+      reloadLists();
     } catch (e) {
       console.error(e);
     }
@@ -185,7 +226,7 @@ export default function Students() {
         });
         resetForm();
         setOpen(false);
-        loadEnrollments();
+        reloadLists();
         return;
       }
       // find-or-create: search by name (and ID/phone when provided) before
@@ -217,7 +258,7 @@ export default function Students() {
     try {
       await invoke("delete_student", { id: deleteTarget.studentId });
       setDeleteTarget(null);
-      loadEnrollments();
+      reloadLists();
     } catch (e) {
       console.error(e);
     }
@@ -226,14 +267,30 @@ export default function Students() {
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
   const selectedSection = sections.find((s) => s.id === selectedSectionId);
 
-  const filtered = search
-    ? enrollments.filter(
-        (e) =>
-          e.student_name.toLowerCase().includes(search.toLowerCase()) ||
-          (e.student_code ?? "").toLowerCase().includes(search.toLowerCase()) ||
-          (e.student_phone ?? "").toLowerCase().includes(search.toLowerCase())
-      )
-    : enrollments;
+  const matchesSearch = (
+    name: string,
+    code?: string | null,
+    phone?: string | null
+  ) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      name.toLowerCase().includes(q) ||
+      (code ?? "").toLowerCase().includes(q) ||
+      (phone ?? "").toLowerCase().includes(q)
+    );
+  };
+
+  const filtered =
+    tab === "enrolled"
+      ? enrollments.filter((e) =>
+          matchesSearch(e.student_name, e.student_code, e.student_phone)
+        )
+      : [];
+  const filteredUnenrolled =
+    tab === "unenrolled"
+      ? unenrolled.filter((s) => matchesSearch(s.name, s.student_id, s.phone))
+      : [];
 
   // Student ids already enrolled in the current section — their "Use existing"
   // button is disabled to avoid a duplicate-enrollment constraint error.
@@ -417,6 +474,24 @@ export default function Students() {
         </Dialog>
       </div>
 
+      {/* Enrolled / Not-enrolled tabs */}
+      <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
+        <Button
+          size="sm"
+          variant={tab === "enrolled" ? "default" : "ghost"}
+          onClick={() => setTab("enrolled")}
+        >
+          {t("students.tab_enrolled")}
+        </Button>
+        <Button
+          size="sm"
+          variant={tab === "unenrolled" ? "default" : "ghost"}
+          onClick={() => setTab("unenrolled")}
+        >
+          {t("students.tab_unenrolled")}
+        </Button>
+      </div>
+
       {/* Search */}
       <Input
         placeholder={t("students.search_placeholder")}
@@ -427,18 +502,45 @@ export default function Students() {
 
       {/* Stats */}
       <p className="text-sm text-muted-foreground">
-        {t("students.enrolled", { count: enrollments.length })}
-        {search && <> · {t("students.match", { count: filtered.length })}</>}
+        {tab === "enrolled" ? (
+          <>
+            {t("students.enrolled", { count: enrollments.length })}
+            {search && (
+              <> · {t("students.match", { count: filtered.length })}</>
+            )}
+          </>
+        ) : (
+          <>
+            {t("students.unenrolled", { count: unenrolled.length })}
+            {search && (
+              <>
+                {" "}
+                · {t("students.match", { count: filteredUnenrolled.length })}
+              </>
+            )}
+          </>
+        )}
       </p>
 
       {/* Student table */}
-      {filtered.length === 0 ? (
+      {tab === "enrolled" ? (
+        filtered.length === 0 ? (
+          <div className="text-center py-16 border rounded-lg">
+            <ClipboardList className="w-10 h-10 mb-3 text-muted-foreground mx-auto" />
+            <p className="text-muted-foreground">
+              {search
+                ? t("students.no_students_match")
+                : t("students.no_students_yet")}
+            </p>
+          </div>
+        ) : null
+      ) : filteredUnenrolled.length === 0 ? (
         <div className="text-center py-16 border rounded-lg">
           <ClipboardList className="w-10 h-10 mb-3 text-muted-foreground mx-auto" />
           <p className="text-muted-foreground">
             {search
               ? t("students.no_students_match")
-              : t("students.no_students_yet")}
+              : t("students.no_unenrolled")}
           </p>
         </div>
       ) : (
@@ -456,7 +558,70 @@ export default function Students() {
                   <th className="text-left px-4 py-2 font-medium">
                     {t("students.phone_column")}
                   </th>
-                  <th className="text-right px-4 py-2 font-medium w-20">
+                  <th className="text-right px-4 py-2 font-medium w-40">
+                    {t("common.actions")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUnenrolled.map((s) => (
+                  <tr key={s.id} className="border-t hover:bg-muted/30">
+                    <td className="px-4 py-2 font-medium">{s.name}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                      {s.student_id ?? "—"}
+                    </td>
+                    <td className="px-4 py-2">
+                      {s.phone ? (
+                        <span dir="ltr" className="font-mono text-xs">
+                          {s.phone}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => enrollFromTab(s.id)}
+                      >
+                        {t("students.enroll")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        aria-label={t("common.delete")}
+                        onClick={() =>
+                          setDeleteTarget({ studentId: s.id, name: s.name })
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {tab === "enrolled" && filtered.length > 0 && (
+        <div className="border rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("common.name")}
+                  </th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("students.id")}
+                  </th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    {t("students.phone_column")}
+                  </th>
+                  <th className="text-right px-4 py-2 font-medium w-28">
                     {t("common.actions")}
                   </th>
                 </tr>
@@ -503,7 +668,7 @@ export default function Students() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -513,6 +678,21 @@ export default function Students() {
                         }}
                       >
                         {t("common.edit")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        aria-label={t("common.delete")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({
+                            studentId: enr.student_id,
+                            name: enr.student_name,
+                          });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>
                   </tr>
@@ -529,7 +709,7 @@ export default function Students() {
         onClose={() => setDetailEnrollmentId(null)}
         onDeleted={() => {
           setDetailEnrollmentId(null);
-          loadEnrollments();
+          reloadLists();
         }}
         onEdit={(enrollmentId) => {
           const enr = enrollments.find((e) => e.id === enrollmentId);

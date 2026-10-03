@@ -69,6 +69,7 @@ pub fn run() {
             commands::students::delete_enrollment,
             commands::students::get_student_detail,
             commands::students::find_students,
+            commands::students::get_unenrolled_students,
             commands::sections::get_sections,
             commands::sections::create_section,
             commands::sections::rename_section,
