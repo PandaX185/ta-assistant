@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Users, ClipboardList, Copy, Check, Trash2 } from "lucide-react";
-import { useFilterStore } from "@/stores/filter-store";
+import { ALL_SECTIONS, useFilterStore } from "@/stores/filter-store";
 import { StudentDetailDialog } from "@/components/students/student-detail-dialog";
 import { useCopyFeedback } from "@/lib/use-copy-feedback";
 
@@ -36,6 +36,19 @@ interface StudentEnrollment {
   student_code: string | null;
   student_email: string | null;
   student_phone: string | null;
+  section_name: string | null;
+}
+
+/// One table row: a student, possibly enrolled in several sections.
+/// `enrollment` is the representative row (first, sections sorted by name)
+/// used for the detail dialog and the edit form — both are student-level.
+interface StudentGroup {
+  studentId: string;
+  name: string;
+  code: string | null;
+  phone: string | null;
+  sections: string[];
+  enrollment: StudentEnrollment;
 }
 
 interface StudentMatch {
@@ -59,8 +72,6 @@ export default function Students() {
   } = useFilterStore();
 
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
-  const [unenrolled, setUnenrolled] = useState<StudentMatch[]>([]);
-  const [tab, setTab] = useState<"enrolled" | "unenrolled">("enrolled");
   const [search, setSearch] = useState("");
 
   // Add/Edit dialog
@@ -94,6 +105,10 @@ export default function Students() {
     name: string;
   } | null>(null);
 
+  // "__all__" is truthy, so the no-filter empty state below never fires for
+  // it — but enrolling/editing needs a concrete section (see Add button).
+  const isAllSections = selectedSectionId === ALL_SECTIONS;
+
   const loadEnrollments = useCallback(async () => {
     if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
       setEnrollments([]);
@@ -103,39 +118,22 @@ export default function Students() {
       const data = await invoke<StudentEnrollment[]>("get_enrollments", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
+        sectionId: isAllSections ? null : selectedSectionId,
       });
       setEnrollments(data);
     } catch (e) {
       console.error(e);
     }
-  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
-
-  const loadUnenrolled = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
-      setUnenrolled([]);
-      return;
-    }
-    try {
-      const data = await invoke<StudentMatch[]>("get_unenrolled_students", {
-        semesterYearId: selectedSemesterYearId,
-        subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
-      });
-      setUnenrolled(data ?? []);
-    } catch (e) {
-      console.error(e);
-    }
-  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
-
-  const reloadLists = useCallback(() => {
-    loadEnrollments();
-    loadUnenrolled();
-  }, [loadEnrollments, loadUnenrolled]);
+  }, [
+    selectedSemesterYearId,
+    selectedSubjectId,
+    selectedSectionId,
+    isAllSections,
+  ]);
 
   useEffect(() => {
-    reloadLists();
-  }, [reloadLists]);
+    loadEnrollments();
+  }, [loadEnrollments]);
 
   const resetForm = () => {
     setName("");
@@ -163,7 +161,12 @@ export default function Students() {
       studentId: studentId || null,
       phone: phone || null,
     });
-    if (selectedSemesterYearId && selectedSubjectId && selectedSectionId) {
+    if (
+      selectedSemesterYearId &&
+      selectedSubjectId &&
+      selectedSectionId &&
+      !isAllSections
+    ) {
       await invoke("create_enrollment", {
         studentId: newStudentId,
         semesterYearId: selectedSemesterYearId,
@@ -174,12 +177,17 @@ export default function Students() {
     setMatches([]);
     resetForm();
     setOpen(false);
-    reloadLists();
+    loadEnrollments();
   };
 
   const useExistingStudent = async (existingId: string) => {
     try {
-      if (selectedSemesterYearId && selectedSubjectId && selectedSectionId) {
+      if (
+        selectedSemesterYearId &&
+        selectedSubjectId &&
+        selectedSectionId &&
+        !isAllSections
+      ) {
         await invoke("create_enrollment", {
           studentId: existingId,
           semesterYearId: selectedSemesterYearId,
@@ -190,24 +198,7 @@ export default function Students() {
       setMatches([]);
       resetForm();
       setOpen(false);
-      reloadLists();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Enroll a student straight from the "Not enrolled" tab.
-  const enrollFromTab = async (existingId: string) => {
-    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId)
-      return;
-    try {
-      await invoke("create_enrollment", {
-        studentId: existingId,
-        semesterYearId: selectedSemesterYearId,
-        subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
-      });
-      reloadLists();
+      loadEnrollments();
     } catch (e) {
       console.error(e);
     }
@@ -226,7 +217,7 @@ export default function Students() {
         });
         resetForm();
         setOpen(false);
-        reloadLists();
+        loadEnrollments();
         return;
       }
       // find-or-create: search by name (and ID/phone when provided) before
@@ -258,7 +249,7 @@ export default function Students() {
     try {
       await invoke("delete_student", { id: deleteTarget.studentId });
       setDeleteTarget(null);
-      reloadLists();
+      loadEnrollments();
     } catch (e) {
       console.error(e);
     }
@@ -267,30 +258,38 @@ export default function Students() {
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
   const selectedSection = sections.find((s) => s.id === selectedSectionId);
 
-  const matchesSearch = (
-    name: string,
-    code?: string | null,
-    phone?: string | null
-  ) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      name.toLowerCase().includes(q) ||
-      (code ?? "").toLowerCase().includes(q) ||
-      (phone ?? "").toLowerCase().includes(q)
-    );
-  };
+  // Dedupe by student (backend order is name, then section, so the first
+  // row seen per student is the deterministic representative). In a single
+  // section each student appears once, so groups === enrollments there.
+  const groups: StudentGroup[] = [];
+  for (const e of enrollments) {
+    const g = groups.find((g) => g.studentId === e.student_id);
+    if (g) {
+      if (e.section_name && !g.sections.includes(e.section_name))
+        g.sections.push(e.section_name);
+    } else {
+      groups.push({
+        studentId: e.student_id,
+        name: e.student_name,
+        code: e.student_code,
+        phone: e.student_phone,
+        sections: e.section_name ? [e.section_name] : [],
+        enrollment: e,
+      });
+    }
+  }
 
-  const filtered =
-    tab === "enrolled"
-      ? enrollments.filter((e) =>
-          matchesSearch(e.student_name, e.student_code, e.student_phone)
-        )
-      : [];
-  const filteredUnenrolled =
-    tab === "unenrolled"
-      ? unenrolled.filter((s) => matchesSearch(s.name, s.student_id, s.phone))
-      : [];
+  const filtered = search
+    ? groups.filter((g) => {
+        const q = search.toLowerCase();
+        return (
+          g.name.toLowerCase().includes(q) ||
+          (g.code ?? "").toLowerCase().includes(q) ||
+          (g.phone ?? "").toLowerCase().includes(q) ||
+          (isAllSections && g.sections.join(" ").toLowerCase().includes(q))
+        );
+      })
+    : groups;
 
   // Student ids already enrolled in the current section — their "Use existing"
   // button is disabled to avoid a duplicate-enrollment constraint error.
@@ -328,9 +327,13 @@ export default function Students() {
             if (!v) resetForm();
           }}
         >
-          <DialogTrigger asChild>
-            <Button size="sm">{t("students.add_student")}</Button>
-          </DialogTrigger>
+          {/* No concrete section to enroll into in All mode — adding and
+              the find-or-create flow stay available once a section is picked. */}
+          {!isAllSections && (
+            <DialogTrigger asChild>
+              <Button size="sm">{t("students.add_student")}</Button>
+            </DialogTrigger>
+          )}
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -474,24 +477,6 @@ export default function Students() {
         </Dialog>
       </div>
 
-      {/* Enrolled / Not-enrolled tabs */}
-      <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
-        <Button
-          size="sm"
-          variant={tab === "enrolled" ? "default" : "ghost"}
-          onClick={() => setTab("enrolled")}
-        >
-          {t("students.tab_enrolled")}
-        </Button>
-        <Button
-          size="sm"
-          variant={tab === "unenrolled" ? "default" : "ghost"}
-          onClick={() => setTab("unenrolled")}
-        >
-          {t("students.tab_unenrolled")}
-        </Button>
-      </div>
-
       {/* Search */}
       <Input
         placeholder={t("students.search_placeholder")}
@@ -502,45 +487,20 @@ export default function Students() {
 
       {/* Stats */}
       <p className="text-sm text-muted-foreground">
-        {tab === "enrolled" ? (
-          <>
-            {t("students.enrolled", { count: enrollments.length })}
-            {search && (
-              <> · {t("students.match", { count: filtered.length })}</>
-            )}
-          </>
-        ) : (
-          <>
-            {t("students.unenrolled", { count: unenrolled.length })}
-            {search && (
-              <>
-                {" "}
-                · {t("students.match", { count: filteredUnenrolled.length })}
-              </>
-            )}
-          </>
-        )}
+        {t("students.enrolled", { count: groups.length })}
+        {search && <> · {t("students.match", { count: filtered.length })}</>}
       </p>
 
       {/* Student table */}
-      {tab === "enrolled" ? (
-        filtered.length === 0 ? (
-          <div className="text-center py-16 border rounded-lg">
-            <ClipboardList className="w-10 h-10 mb-3 text-muted-foreground mx-auto" />
-            <p className="text-muted-foreground">
-              {search
-                ? t("students.no_students_match")
-                : t("students.no_students_yet")}
-            </p>
-          </div>
-        ) : null
-      ) : filteredUnenrolled.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="text-center py-16 border rounded-lg">
           <ClipboardList className="w-10 h-10 mb-3 text-muted-foreground mx-auto" />
           <p className="text-muted-foreground">
             {search
               ? t("students.no_students_match")
-              : t("students.no_unenrolled")}
+              : isAllSections
+                ? t("students.no_students_all")
+                : t("students.no_students_yet")}
           </p>
         </div>
       ) : (
@@ -558,94 +518,36 @@ export default function Students() {
                   <th className="text-left px-4 py-2 font-medium">
                     {t("students.phone_column")}
                   </th>
-                  <th className="text-right px-4 py-2 font-medium w-40">
-                    {t("common.actions")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUnenrolled.map((s) => (
-                  <tr key={s.id} className="border-t hover:bg-muted/30">
-                    <td className="px-4 py-2 font-medium">{s.name}</td>
-                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                      {s.student_id ?? "—"}
-                    </td>
-                    <td className="px-4 py-2">
-                      {s.phone ? (
-                        <span dir="ltr" className="font-mono text-xs">
-                          {s.phone}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => enrollFromTab(s.id)}
-                      >
-                        {t("students.enroll")}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        aria-label={t("common.delete")}
-                        onClick={() =>
-                          setDeleteTarget({ studentId: s.id, name: s.name })
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      {tab === "enrolled" && filtered.length > 0 && (
-        <div className="border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[520px]">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-4 py-2 font-medium">
-                    {t("common.name")}
-                  </th>
-                  <th className="text-left px-4 py-2 font-medium">
-                    {t("students.id")}
-                  </th>
-                  <th className="text-left px-4 py-2 font-medium">
-                    {t("students.phone_column")}
-                  </th>
+                  {isAllSections && (
+                    <th className="text-left px-4 py-2 font-medium">
+                      {t("students.sections_column")}
+                    </th>
+                  )}
                   <th className="text-right px-4 py-2 font-medium w-28">
                     {t("common.actions")}
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((enr) => (
+                {filtered.map((g) => (
                   <tr
-                    key={enr.id}
+                    key={g.studentId}
                     className="border-t hover:bg-muted/30 cursor-pointer"
                   >
                     <td
                       className="px-4 py-2 font-medium text-primary hover:underline"
-                      onClick={() => setDetailEnrollmentId(enr.id)}
+                      onClick={() => setDetailEnrollmentId(g.enrollment.id)}
                     >
-                      {enr.student_name}
+                      {g.name}
                     </td>
                     <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                      {enr.student_code ?? "—"}
+                      {g.code ?? "—"}
                     </td>
                     <td className="px-4 py-2">
-                      {enr.student_phone ? (
+                      {g.phone ? (
                         <span className="inline-flex items-center gap-1.5">
                           <span dir="ltr" className="font-mono text-xs">
-                            {enr.student_phone}
+                            {g.phone}
                           </span>
                           <Button
                             variant="ghost"
@@ -654,10 +556,10 @@ export default function Students() {
                             aria-label={t("students.copy_phone")}
                             onClick={(e) => {
                               e.stopPropagation();
-                              copyPhone(enr.student_id, enr.student_phone!);
+                              copyPhone(g.studentId, g.phone!);
                             }}
                           >
-                            {isCopied(enr.student_id) ? (
+                            {isCopied(g.studentId) ? (
                               <Check className="h-3.5 w-3.5 text-green-500" />
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
@@ -668,13 +570,18 @@ export default function Students() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
+                    {isAllSections && (
+                      <td className="px-4 py-2 text-xs text-muted-foreground">
+                        {g.sections.length > 0 ? g.sections.join(", ") : "—"}
+                      </td>
+                    )}
                     <td className="px-4 py-2 text-right whitespace-nowrap">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          openEdit(enr);
+                          openEdit(g.enrollment);
                         }}
                       >
                         {t("common.edit")}
@@ -687,8 +594,8 @@ export default function Students() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeleteTarget({
-                            studentId: enr.student_id,
-                            name: enr.student_name,
+                            studentId: g.studentId,
+                            name: g.name,
                           });
                         }}
                       >
@@ -709,7 +616,7 @@ export default function Students() {
         onClose={() => setDetailEnrollmentId(null)}
         onDeleted={() => {
           setDetailEnrollmentId(null);
-          reloadLists();
+          loadEnrollments();
         }}
         onEdit={(enrollmentId) => {
           const enr = enrollments.find((e) => e.id === enrollmentId);

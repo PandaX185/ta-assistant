@@ -422,6 +422,50 @@ fn delete_assignment_impl(conn: &Connection, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn create_bonus(
+    app: AppHandle,
+    enrollment_id: String,
+    value: f64,
+    reason: String,
+) -> Result<String, String> {
+    let conn = crate::db::open_db(&app)?;
+    create_bonus_impl(&conn, enrollment_id, value, reason)
+}
+
+pub(crate) fn create_bonus_impl(
+    conn: &Connection,
+    enrollment_id: String,
+    value: f64,
+    reason: String,
+) -> Result<String, String> {
+    if !value.is_finite() {
+        return Err("Bonus value must be a number".into());
+    }
+    if reason.trim().is_empty() {
+        return Err("Bonus reason must not be empty".into());
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO bonuses (id, enrollment_id, value, reason) VALUES (?, ?, ?, ?)",
+        rusqlite::params![id, enrollment_id, value, reason.trim()],
+    )
+    .map_err(|e| format!("Create bonus failed: {e}"))?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn delete_bonus(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    delete_bonus_impl(&conn, id)
+}
+
+fn delete_bonus_impl(conn: &Connection, id: String) -> Result<(), String> {
+    conn.execute("DELETE FROM bonuses WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| format!("Delete bonus failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn delete_quiz_column(
     app: AppHandle,
     semester_year_id: String,
@@ -494,6 +538,41 @@ mod tests {
     use super::*;
     use crate::commands::sections::{create_section_impl, get_sections_impl};
     use crate::commands::test_utils;
+
+    #[test]
+    fn bonus_round_trip_and_validation() {
+        let conn = test_utils::test_conn();
+        let (_sy, _sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+
+        // Validation first: blank reason, non-finite value.
+        assert!(create_bonus_impl(&conn, "enr-a".into(), 1.0, "   ".into()).is_err());
+        assert!(create_bonus_impl(&conn, "enr-a".into(), f64::NAN, "Help".into()).is_err());
+        // Unknown enrollment → FK rejects.
+        assert!(create_bonus_impl(&conn, "enr-nope".into(), 1.0, "Help".into()).is_err());
+
+        // Positive and negative (deduction) values both work.
+        let id = create_bonus_impl(&conn, "enr-a".into(), 2.5, "Participation".into()).unwrap();
+        create_bonus_impl(&conn, "enr-a".into(), -1.0, "Late".into()).unwrap();
+
+        let total: f64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(value), 0) FROM bonuses WHERE enrollment_id = 'enr-a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(total, 1.5);
+
+        delete_bonus_impl(&conn, id).unwrap();
+        let remaining: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bonuses WHERE enrollment_id = 'enr-a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 1);
+    }
 
     #[test]
     fn empty_sheet_when_no_grade_data() {

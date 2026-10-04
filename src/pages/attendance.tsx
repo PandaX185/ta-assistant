@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { useFilterStore } from "@/stores/filter-store";
+import { concreteSectionId, useFilterStore } from "@/stores/filter-store";
 
 interface Lecture {
   id: string;
@@ -45,6 +45,10 @@ export default function Attendance() {
     subjects,
   } = useFilterStore();
 
+  // "All sections" is not a concrete section — fall back to the
+  // select-a-section state rather than querying with a bogus id.
+  const sectionId = concreteSectionId(selectedSectionId);
+
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -58,7 +62,7 @@ export default function Attendance() {
   const [createDesc, setCreateDesc] = useState("");
 
   const loadLectures = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
+    if (!selectedSemesterYearId || !selectedSubjectId || !sectionId) {
       setLectures([]);
       return;
     }
@@ -66,13 +70,13 @@ export default function Attendance() {
       const data = await invoke<Lecture[]>("get_lectures", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
+        sectionId,
       });
       setLectures(data);
     } catch (e) {
       console.error(e);
     }
-  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
+  }, [selectedSemesterYearId, selectedSubjectId, sectionId]);
 
   const loadAttendance = useCallback(async (lectureId: string) => {
     setLoading(true);
@@ -102,7 +106,7 @@ export default function Attendance() {
     if (
       !selectedSemesterYearId ||
       !selectedSubjectId ||
-      !selectedSectionId ||
+      !sectionId ||
       !createDate
     )
       return;
@@ -110,7 +114,7 @@ export default function Attendance() {
       await invoke("create_lecture", {
         subjectId: selectedSubjectId,
         semesterYearId: selectedSemesterYearId,
-        sectionId: selectedSectionId,
+        sectionId,
         date: createDate,
         title: createDesc || null,
       });
@@ -174,7 +178,7 @@ export default function Attendance() {
       !loading &&
       selectedSemesterYearId &&
       selectedSubjectId &&
-      selectedSectionId
+      sectionId
     ) {
       const seedAndReload = async () => {
         try {
@@ -182,7 +186,7 @@ export default function Attendance() {
             lectureId: selectedLecture.id,
             semesterYearId: selectedSemesterYearId,
             subjectId: selectedSubjectId,
-            sectionId: selectedSectionId,
+            sectionId,
           });
           loadAttendance(selectedLecture.id);
         } catch (e) {
@@ -197,14 +201,14 @@ export default function Attendance() {
     loading,
     selectedSemesterYearId,
     selectedSubjectId,
-    selectedSectionId,
+    sectionId,
     loadAttendance,
   ]);
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
-  const selectedSection = sections.find((s) => s.id === selectedSectionId);
+  const selectedSection = sections.find((s) => s.id === sectionId);
 
-  if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
+  if (!selectedSemesterYearId || !selectedSubjectId || !sectionId) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">{t("attendance.title")}</h1>

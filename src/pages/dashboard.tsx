@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useFilterStore } from "@/stores/filter-store";
+import { concreteSectionId, useFilterStore } from "@/stores/filter-store";
 import { localizeSeason } from "@/i18n";
 
 interface DashboardStats {
@@ -23,10 +23,14 @@ export default function Dashboard() {
     semesterYears,
   } = useFilterStore();
 
+  // "All sections" is not a concrete section — fall back to the
+  // select-a-section state rather than querying with a bogus id.
+  const sectionId = concreteSectionId(selectedSectionId);
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   const loadStats = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
+    if (!selectedSemesterYearId || !selectedSubjectId || !sectionId) {
       setStats(null);
       return;
     }
@@ -35,21 +39,21 @@ export default function Dashboard() {
       const enrollments = await invoke<any[]>("get_enrollments", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
+        sectionId,
       });
 
       // Get grades
       const grades = await invoke<any>("get_grades", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
+        sectionId,
       });
 
       // Get lectures
       const lectures = await invoke<any[]>("get_lectures", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
+        sectionId,
       });
 
       setStats({
@@ -61,19 +65,19 @@ export default function Dashboard() {
     } catch (e) {
       console.error(e);
     }
-  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
+  }, [selectedSemesterYearId, selectedSubjectId, sectionId]);
 
   useEffect(() => {
     loadStats();
   }, [loadStats]);
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
-  const selectedSection = sections.find((s) => s.id === selectedSectionId);
+  const selectedSection = sections.find((s) => s.id === sectionId);
   const selectedSemester = semesterYears.find(
-    (sy) => sy.id === selectedSemesterYearId,
+    (sy) => sy.id === selectedSemesterYearId
   );
 
-  if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
+  if (!selectedSemesterYearId || !selectedSubjectId || !sectionId) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">{t("dashboard.title")}</h1>
@@ -95,7 +99,8 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground">
           {selectedSubject?.name}
           {selectedSection && ` · ${selectedSection.name}`}
-          {selectedSemester && ` · ${localizeSeason(selectedSemester.semester)} ${selectedSemester.year}`}
+          {selectedSemester &&
+            ` · ${localizeSeason(selectedSemester.semester)} ${selectedSemester.year}`}
         </p>
       </div>
 
@@ -131,9 +136,7 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
-              {stats?.assignment_count ?? 0}
-            </p>
+            <p className="text-2xl font-bold">{stats?.assignment_count ?? 0}</p>
           </CardContent>
         </Card>
 
@@ -144,9 +147,7 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
-              {stats?.lecture_count ?? 0}
-            </p>
+            <p className="text-2xl font-bold">{stats?.lecture_count ?? 0}</p>
           </CardContent>
         </Card>
       </div>
@@ -164,15 +165,23 @@ export default function Dashboard() {
       {stats && stats.enrolled_students > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">{t("dashboard.getting_started")}</CardTitle>
+            <CardTitle className="text-sm">
+              {t("dashboard.getting_started")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground space-y-2">
-            <p>{t("dashboard.students_enrolled", { count: stats.enrolled_students })}</p>
+            <p>
+              {t("dashboard.students_enrolled", {
+                count: stats.enrolled_students,
+              })}
+            </p>
             {stats.quiz_count === 0 && stats.assignment_count === 0 && (
               <p>{t("dashboard.grades_hint", { tab: t("sidebar.grades") })}</p>
             )}
             {stats.lecture_count === 0 && (
-              <p>{t("dashboard.lectures_hint", { tab: t("sidebar.attendance") })}</p>
+              <p>
+                {t("dashboard.lectures_hint", { tab: t("sidebar.attendance") })}
+              </p>
             )}
           </CardContent>
         </Card>

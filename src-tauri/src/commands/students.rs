@@ -21,6 +21,7 @@ pub struct Enrollment {
     pub student_code: Option<String>,
     pub student_email: Option<String>,
     pub student_phone: Option<String>,
+    pub section_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -99,61 +100,6 @@ fn get_students_impl(conn: &Connection) -> Result<Vec<Student>, String> {
     Ok(result)
 }
 
-/// Students with no enrollment row in the given section. Backs the
-/// "Not enrolled" tab so existing students can be enrolled without retyping.
-#[tauri::command]
-pub fn get_unenrolled_students(
-    app: AppHandle,
-    semester_year_id: String,
-    subject_id: String,
-    section_id: String,
-) -> Result<Vec<Student>, String> {
-    let conn = crate::db::open_db(&app)?;
-    get_unenrolled_students_impl(&conn, semester_year_id, subject_id, section_id)
-}
-
-fn get_unenrolled_students_impl(
-    conn: &Connection,
-    semester_year_id: String,
-    subject_id: String,
-    section_id: String,
-) -> Result<Vec<Student>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, name, email, student_id, phone FROM students s
-             WHERE NOT EXISTS (
-                 SELECT 1 FROM enrollments e
-                 WHERE e.student_id = s.id
-                   AND e.semester_year_id = ?1
-                   AND e.subject_id = ?2
-                   AND e.section_id = ?3
-             )
-             ORDER BY name",
-        )
-        .map_err(|e| format!("Query prepare failed: {e}"))?;
-
-    let rows = stmt
-        .query_map(
-            rusqlite::params![semester_year_id, subject_id, section_id],
-            |row| {
-                Ok(Student {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    email: row.get(2)?,
-                    student_id: row.get(3)?,
-                    phone: row.get(4)?,
-                })
-            },
-        )
-        .map_err(|e| format!("Query failed: {e}"))?;
-
-    let mut result = Vec::new();
-    for row in rows {
-        result.push(row.map_err(|e| format!("Row failed: {e}"))?);
-    }
-    Ok(result)
-}
-
 #[tauri::command]
 pub fn create_student(
     app: AppHandle,
@@ -223,12 +169,15 @@ pub(crate) fn delete_student_impl(conn: &Connection, id: &str) -> Result<(), Str
     Ok(())
 }
 
+/// Lists enrollments for a subject. `section_id = None` lists every section
+/// of the subject (the "All sections" filter); the rows then carry
+/// `section_name` so the caller can group or label them.
 #[tauri::command]
 pub fn get_enrollments(
     app: AppHandle,
     semester_year_id: String,
     subject_id: String,
-    section_id: String,
+    section_id: Option<String>,
 ) -> Result<Vec<Enrollment>, String> {
     let conn = crate::db::open_db(&app)?;
     get_enrollments_impl(&conn, semester_year_id, subject_id, section_id)
@@ -238,15 +187,17 @@ fn get_enrollments_impl(
     conn: &Connection,
     semester_year_id: String,
     subject_id: String,
-    section_id: String,
+    section_id: Option<String>,
 ) -> Result<Vec<Enrollment>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT e.id, e.student_id, e.semester_year_id, e.subject_id, s.name, s.student_id, s.email, s.phone
+            "SELECT e.id, e.student_id, e.semester_year_id, e.subject_id, s.name, s.student_id, s.email, s.phone, sec.name
              FROM enrollments e
              JOIN students s ON s.id = e.student_id
-             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2 AND e.section_id = ?3
-             ORDER BY s.name",
+             LEFT JOIN sections sec ON sec.id = e.section_id
+             WHERE e.semester_year_id = ?1 AND e.subject_id = ?2
+               AND (?3 IS NULL OR e.section_id = ?3)
+             ORDER BY s.name, sec.name",
         )
         .map_err(|e| format!("Query prepare failed: {e}"))?;
 
@@ -263,6 +214,7 @@ fn get_enrollments_impl(
                     student_code: row.get(5)?,
                     student_email: row.get(6)?,
                     student_phone: row.get(7)?,
+                    section_name: row.get(8)?,
                 })
             },
         )
@@ -568,41 +520,9 @@ mod tests {
         let (sy, sub, a, _b) = test_utils::seed_basic_scenario(&conn);
         test_utils::seed_section(&conn, "sec-1", &sy, &sub);
         delete_student_impl(&conn, &a).unwrap();
-        let enr = get_enrollments_impl(&conn, sy, sub, "sec-1".into()).unwrap();
+        let enr = get_enrollments_impl(&conn, sy, sub, Some("sec-1".into())).unwrap();
         assert_eq!(enr.len(), 1);
         assert_eq!(enr[0].student_name, "Bob");
-    }
-
-    #[test]
-    fn unenrolled_excludes_only_this_section() {
-        let conn = test_utils::test_conn();
-        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
-        // Charlie exists but is enrolled nowhere; Dana is enrolled in sec-2 only.
-        test_utils::seed_student(&conn, "stu-c", "Charlie");
-        test_utils::seed_student(&conn, "stu-d", "Dana");
-        conn.execute(
-            "INSERT INTO sections (id, subject_id, semester_year_id, name, color)
-             VALUES ('sec-2', ?1, ?2, 'Group B', NULL)",
-            rusqlite::params![sub, sy],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id)
-             VALUES ('enr-d2', 'stu-d', ?1, ?2, 'sec-2')",
-            rusqlite::params![sy, sub],
-        )
-        .unwrap();
-
-        let unenrolled =
-            get_unenrolled_students_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
-        let names: Vec<&str> = unenrolled.iter().map(|s| s.name.as_str()).collect();
-        // Alice/Bob are in sec-1 → excluded. Charlie (nowhere) and Dana
-        // (sec-2 only) are both enrollable into sec-1.
-        assert_eq!(names, vec!["Charlie", "Dana"]);
-
-        let unenrolled_sec2 = get_unenrolled_students_impl(&conn, sy, sub, "sec-2".into()).unwrap();
-        let names2: Vec<&str> = unenrolled_sec2.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names2, vec!["Alice", "Bob", "Charlie"]);
     }
 
     #[test]
@@ -615,13 +535,53 @@ mod tests {
         test_utils::seed_enrollment(&conn, "enr-d", "stu-c", "sy-2", &sub);
         test_utils::seed_section(&conn, "sec-1", &sy, &sub);
 
-        let enr = get_enrollments_impl(&conn, sy.clone(), sub.clone(), "sec-1".into()).unwrap();
+        let enr =
+            get_enrollments_impl(&conn, sy.clone(), sub.clone(), Some("sec-1".into())).unwrap();
         assert_eq!(enr.len(), 3);
         assert!(enr
             .iter()
             .all(|e| e.semester_year_id == sy && e.subject_id == sub));
         let names: Vec<&str> = enr.iter().map(|e| e.student_name.as_str()).collect();
         assert_eq!(names, vec!["Alice", "Bob", "Charlie"]);
+    }
+
+    #[test]
+    fn enrollments_without_section_span_all_sections_with_names() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        // Second section; Bob enrolls in both.
+        conn.execute(
+            "INSERT INTO sections (id, subject_id, semester_year_id, name, color)
+             VALUES ('sec-2', ?1, ?2, 'Group B', NULL)",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id)
+             VALUES ('enr-b2', 'stu-b', ?1, ?2, 'sec-2')",
+            rusqlite::params![sy, sub],
+        )
+        .unwrap();
+
+        // Concrete section still narrows.
+        let enr =
+            get_enrollments_impl(&conn, sy.clone(), sub.clone(), Some("sec-1".into())).unwrap();
+        assert_eq!(enr.len(), 2);
+        assert!(enr
+            .iter()
+            .all(|e| e.section_name.as_deref() == Some("Group A")));
+
+        // None lists both sections; Bob twice (once per enrollment).
+        let all = get_enrollments_impl(&conn, sy, sub, None).unwrap();
+        assert_eq!(all.len(), 3);
+        let bobs: Vec<_> = all.iter().filter(|e| e.student_name == "Bob").collect();
+        assert_eq!(bobs.len(), 2);
+        let mut bob_sections: Vec<&str> = bobs
+            .iter()
+            .map(|e| e.section_name.as_deref().unwrap())
+            .collect();
+        bob_sections.sort();
+        assert_eq!(bob_sections, vec!["Group A", "Group B"]);
     }
 
     #[test]
@@ -634,7 +594,7 @@ mod tests {
         )
         .unwrap();
         test_utils::seed_section(&conn, "sec-1", &sy, &sub);
-        let enr = get_enrollments_impl(&conn, sy, sub, "sec-1".into()).unwrap();
+        let enr = get_enrollments_impl(&conn, sy, sub, Some("sec-1".into())).unwrap();
         let alice = enr.iter().find(|e| e.student_name == "Alice").unwrap();
         assert_eq!(alice.student_email.as_deref(), Some("a@test.com"));
         assert_eq!(alice.student_phone.as_deref(), Some("01234"));
@@ -658,7 +618,7 @@ mod tests {
         test_utils::seed_section(&conn, "sec-1", &sy, &sub);
         delete_enrollment_impl(&conn, "enr-a".into()).unwrap();
         assert_eq!(
-            get_enrollments_impl(&conn, sy, sub, "sec-1".into())
+            get_enrollments_impl(&conn, sy, sub, Some("sec-1".into()))
                 .unwrap()
                 .len(),
             1

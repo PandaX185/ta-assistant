@@ -22,6 +22,23 @@ export interface Section {
   color: string | null;
 }
 
+/// Sentinel section id meaning "all sections of the selected subject".
+/// Pages that are inherently per-section (grades, attendance, dashboard)
+/// treat it as "no concrete section" and show their select-a-section state.
+export const ALL_SECTIONS = "__all__";
+
+/// Resolves the store's section selection to a concrete section id, or null
+/// when nothing is selected or "All sections" is picked. Pages that need a
+/// single section (grades, attendance, dashboard, section-scoped data tools)
+/// treat null as "select a section" and show their empty state instead.
+export function concreteSectionId(
+  selectedSectionId: string | null
+): string | null {
+  return !selectedSectionId || selectedSectionId === ALL_SECTIONS
+    ? null
+    : selectedSectionId;
+}
+
 export interface FilterState {
   semesterYears: SemesterYear[];
   subjects: Subject[];
@@ -112,12 +129,15 @@ export const useFilterStore = create<FilterState>((set) => ({
       set((state) => ({
         sections: secs,
         selectedSectionId:
-          secs.length === 1
-            ? secs[0].id
-            : state.selectedSectionId &&
-                secs.some((s) => s.id === state.selectedSectionId)
-              ? state.selectedSectionId
-              : null,
+          // "All sections" survives reloads — it applies to any subject.
+          state.selectedSectionId === ALL_SECTIONS
+            ? ALL_SECTIONS
+            : secs.length === 1
+              ? secs[0].id
+              : state.selectedSectionId &&
+                  secs.some((s) => s.id === state.selectedSectionId)
+                ? state.selectedSectionId
+                : null,
       }));
     } catch (e) {
       console.error("Failed to load sections:", e);

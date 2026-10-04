@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFilterStore } from "@/stores/filter-store";
+import { ALL_SECTIONS, useFilterStore } from "@/stores/filter-store";
 import { localizeSeason } from "@/i18n";
 
 export default function FilterBar() {
@@ -110,6 +110,11 @@ export default function FilterBar() {
               {sections.length === 0 && (
                 <SelectItem value="__placeholder" disabled>
                   {t("common.no_sections_yet")}
+                </SelectItem>
+              )}
+              {sections.length > 0 && (
+                <SelectItem value={ALL_SECTIONS}>
+                  {t("common.all_sections")}
                 </SelectItem>
               )}
               {sections.map((sec) => (

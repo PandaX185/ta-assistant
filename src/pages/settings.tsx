@@ -40,7 +40,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useFilterStore, Subject, Section } from "@/stores/filter-store";
+import {
+  useFilterStore,
+  Subject,
+  Section,
+  concreteSectionId,
+} from "@/stores/filter-store";
 import { useUIStore } from "@/stores/ui-store";
 import { localizeSeason } from "@/i18n";
 
@@ -812,8 +817,11 @@ function DataSection() {
     {}
   );
 
+  // Section-scoped export/import needs one concrete section — "All
+  // sections" shows the select-a-section state instead of sending a bogus id.
+  const sectionId = concreteSectionId(selectedSectionId);
   const ready = Boolean(
-    selectedSemesterYearId && selectedSubjectId && selectedSectionId
+    selectedSemesterYearId && selectedSubjectId && sectionId
   );
 
   const { confirmDialog, confirmDialogElement } = useConfirmDialog();

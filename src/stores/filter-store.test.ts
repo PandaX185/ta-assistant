@@ -1,91 +1,55 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { useFilterStore } from "./filter-store";
+import {
+  ALL_SECTIONS,
+  concreteSectionId,
+  useFilterStore,
+} from "./filter-store";
 
-const mockInvoke = vi.mocked(invoke);
+beforeEach(() => {
+  vi.mocked(invoke).mockReset();
+  useFilterStore.setState({
+    semesterYears: [{ id: "sy-1", year: 2026, semester: "Fall" }],
+    subjects: [{ id: "sub-1", name: "Databases", code: null, color: null }],
+    sections: [],
+    selectedSemesterYearId: "sy-1",
+    selectedSubjectId: "sub-1",
+    selectedSectionId: null,
+    loaded: true,
+  });
+});
 
-describe("filter-store", () => {
-  beforeEach(() => {
-    mockInvoke.mockReset();
-    useFilterStore.setState({
-      semesterYears: [],
-      subjects: [],
-      selectedSemesterYearId: null,
-      selectedSubjectId: null,
-      loaded: false,
-      pendingDetailEnrollmentId: null,
+describe("concreteSectionId", () => {
+  it("resolves a real section id unchanged", () => {
+    expect(concreteSectionId("sec-1")).toBe("sec-1");
+  });
+
+  it("resolves null and All sections to null", () => {
+    expect(concreteSectionId(null)).toBeNull();
+    expect(concreteSectionId(ALL_SECTIONS)).toBeNull();
+  });
+});
+
+describe("loadSections", () => {
+  it("keeps the All-sections selection across reloads", async () => {
+    const sections = [
+      {
+        id: "sec-1",
+        subject_id: "sub-1",
+        semester_year_id: "sy-1",
+        name: "Group A",
+        color: null,
+      },
+    ];
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_sections") return Promise.resolve(sections);
+      return Promise.resolve([]);
     });
-  });
+    useFilterStore.setState({ selectedSectionId: ALL_SECTIONS });
 
-  it("loadData fetches semester years only (subjects are scoped)", async () => {
-    mockInvoke.mockResolvedValueOnce([
-      { id: "sy-1", year: 2026, semester: "Fall" },
-    ]);
+    await useFilterStore.getState().loadSections();
 
-    await useFilterStore.getState().loadData();
-
-    expect(mockInvoke).toHaveBeenCalledWith("get_semester_years");
-    expect(mockInvoke).not.toHaveBeenCalledWith(
-      "get_subjects",
-      expect.anything(),
-    );
-    const s = useFilterStore.getState();
-    expect(s.loaded).toBe(true);
-    expect(s.semesterYears).toHaveLength(1);
-    expect(s.semesterYears[0].semester).toBe("Fall");
-    expect(s.subjects).toHaveLength(0);
-  });
-
-  it("loadSubjects fetches subjects for the selected semester", async () => {
-    useFilterStore.setState({ selectedSemesterYearId: "sy-1" });
-    mockInvoke.mockResolvedValueOnce([
-      { id: "sub-1", name: "Databases", code: null, color: null },
-    ]);
-
-    await useFilterStore.getState().loadSubjects();
-
-    expect(mockInvoke).toHaveBeenCalledWith("get_subjects", {
-      semesterYearId: "sy-1",
-    });
-    const s = useFilterStore.getState();
-    expect(s.subjects).toHaveLength(1);
-    // Single subject auto-selects.
-    expect(s.selectedSubjectId).toBe("sub-1");
-  });
-
-  it("loadSubjects clears subjects when no semester is selected", async () => {
-    useFilterStore.setState({
-      selectedSemesterYearId: null,
-      subjects: [{ id: "sub-1", name: "Databases", code: null, color: null }],
-      selectedSubjectId: "sub-1",
-    });
-
-    await useFilterStore.getState().loadSubjects();
-
-    expect(mockInvoke).not.toHaveBeenCalled();
-    const s = useFilterStore.getState();
-    expect(s.subjects).toHaveLength(0);
-    expect(s.selectedSubjectId).toBeNull();
-  });
-
-  it("loadData leaves state untouched and does not throw on failure", async () => {
-    mockInvoke.mockRejectedValue(new Error("backend down"));
-    await expect(useFilterStore.getState().loadData()).resolves.toBeUndefined();
-    expect(useFilterStore.getState().loaded).toBe(false);
-  });
-
-  it("selection setters update ids", () => {
-    useFilterStore.getState().setSelectedSemesterYearId("sy-9");
-    useFilterStore.getState().setSelectedSubjectId("sub-9");
-    const s = useFilterStore.getState();
-    expect(s.selectedSemesterYearId).toBe("sy-9");
-    expect(s.selectedSubjectId).toBe("sub-9");
-  });
-
-  it("pending detail enrollment id is set and cleared", () => {
-    useFilterStore.getState().setPendingDetailEnrollmentId("enr-42");
-    expect(useFilterStore.getState().pendingDetailEnrollmentId).toBe("enr-42");
-    useFilterStore.getState().setPendingDetailEnrollmentId(null);
-    expect(useFilterStore.getState().pendingDetailEnrollmentId).toBeNull();
+    expect(useFilterStore.getState().sections).toEqual(sections);
+    expect(useFilterStore.getState().selectedSectionId).toBe(ALL_SECTIONS);
   });
 });

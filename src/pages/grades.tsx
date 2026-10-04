@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileText, ClipboardPenLine } from "lucide-react";
-import { useFilterStore } from "@/stores/filter-store";
+import { concreteSectionId, useFilterStore } from "@/stores/filter-store";
 
 interface GradeColumn {
   id: string;
@@ -56,6 +56,10 @@ export default function Grades() {
     subjects,
   } = useFilterStore();
 
+  // "All sections" is not a concrete section — fall back to the
+  // select-a-section state rather than querying with a bogus id.
+  const sectionId = concreteSectionId(selectedSectionId);
+
   const [sheet, setSheet] = useState<GradeSheet | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -80,7 +84,7 @@ export default function Grades() {
   const [editValue, setEditValue] = useState("");
 
   const loadGrades = useCallback(async () => {
-    if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
+    if (!selectedSemesterYearId || !selectedSubjectId || !sectionId) {
       setSheet(null);
       return;
     }
@@ -89,7 +93,7 @@ export default function Grades() {
       const data = await invoke<GradeSheet>("get_grades", {
         semesterYearId: selectedSemesterYearId,
         subjectId: selectedSubjectId,
-        sectionId: selectedSectionId,
+        sectionId,
       });
       setSheet(data);
     } catch (e) {
@@ -97,7 +101,7 @@ export default function Grades() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSemesterYearId, selectedSubjectId, selectedSectionId]);
+  }, [selectedSemesterYearId, selectedSubjectId, sectionId]);
 
   useEffect(() => {
     loadGrades();
@@ -109,7 +113,7 @@ export default function Grades() {
       !createMax ||
       !selectedSemesterYearId ||
       !selectedSubjectId ||
-      !selectedSectionId
+      !sectionId
     )
       return;
     try {
@@ -117,7 +121,7 @@ export default function Grades() {
         await invoke("create_quiz_bulk", {
           semesterYearId: selectedSemesterYearId,
           subjectId: selectedSubjectId,
-          sectionId: selectedSectionId,
+          sectionId,
           name: createName,
           maxScore: parseFloat(createMax),
           date: createDate,
@@ -126,7 +130,7 @@ export default function Grades() {
         await invoke("create_assignment_bulk", {
           semesterYearId: selectedSemesterYearId,
           subjectId: selectedSubjectId,
-          sectionId: selectedSectionId,
+          sectionId,
           name: createName,
           maxScore: parseFloat(createMax),
           date: createDate,
@@ -176,7 +180,7 @@ export default function Grades() {
         {
           semesterYearId: selectedSemesterYearId,
           subjectId: selectedSubjectId,
-          sectionId: selectedSectionId,
+          sectionId,
           name: colName,
           date: colDate,
         }
@@ -188,9 +192,9 @@ export default function Grades() {
   };
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
-  const selectedSection = sections.find((s) => s.id === selectedSectionId);
+  const selectedSection = sections.find((s) => s.id === sectionId);
 
-  if (!selectedSemesterYearId || !selectedSubjectId || !selectedSectionId) {
+  if (!selectedSemesterYearId || !selectedSubjectId || !sectionId) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">{t("grades.title")}</h1>

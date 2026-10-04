@@ -19,6 +19,7 @@
     "semester": "Semester",
     "subject": "Subject",
     "section": "Section",
+    "all_sections": "All sections",
     "actions": "Actions",
     "date": "Date",
     "color_optional": "Color (optional)",
@@ -154,12 +155,8 @@
     "match_other": "{{count}} matches",
     "no_students_match": "No students match your search.",
     "no_students_yet": "No students enrolled yet. Add your first student above.",
-    "tab_enrolled": "Enrolled",
-    "tab_unenrolled": "Not enrolled",
-    "unenrolled_one": "{{count}} student not enrolled",
-    "unenrolled_other": "{{count}} students not enrolled",
-    "no_unenrolled": "Everyone is enrolled in this section.",
-    "enroll": "Enroll",
+    "no_students_all": "No students enrolled in any section of this subject.",
+    "sections_column": "Sections",
     "delete_student": "Delete Student?",
     "delete_student_desc_1": "This will permanently delete",
     "delete_student_desc_2": "and all their grades, attendance records, and bonuses. This cannot be undone."
@@ -355,6 +352,13 @@
     "grand_bonus": "Bonus: {{value}}",
     "delete_confirm": "Delete Student?",
     "delete_confirm_desc_1": "This will permanently delete",
-    "delete_confirm_desc_2": "and all their records. This cannot be undone."
+    "delete_confirm_desc_2": "and all their records. This cannot be undone.",
+    "add_bonus": "Add",
+    "bonus_value_placeholder": "e.g. 2 or -1",
+    "bonus_reason_placeholder": "Reason, e.g. Participation",
+    "delete_bonus": "Delete bonus: {{reason}}",
+    "delete_bonus_confirm": "Delete this bonus?",
+    "delete_bonus_desc_1": "This will remove the bonus",
+    "delete_bonus_desc_2": "from the total. This cannot be undone."
   }
 }

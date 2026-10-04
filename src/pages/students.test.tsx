@@ -479,7 +479,6 @@ describe("Students", () => {
             student_phone: null,
           },
         ]);
-      if (cmd === "get_unenrolled_students") return Promise.resolve([]);
       return Promise.resolve(undefined);
     });
 
@@ -509,7 +508,7 @@ describe("Students", () => {
     );
   });
 
-  it("shows the not-enrolled tab and enrolls from it", async () => {
+  it("dedupes students across sections when All is picked", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "get_enrollments")
         return Promise.resolve([
@@ -518,73 +517,56 @@ describe("Students", () => {
             student_id: "stu-1",
             semester_year_id: "sy-1",
             subject_id: "sub-1",
+            student_name: "Bob",
+            student_code: null,
+            student_email: null,
+            student_phone: null,
+            section_name: "Group A",
+          },
+          {
+            id: "enr-2",
+            student_id: "stu-1",
+            semester_year_id: "sy-1",
+            subject_id: "sub-1",
+            student_name: "Bob",
+            student_code: null,
+            student_email: null,
+            student_phone: null,
+            section_name: "Group B",
+          },
+          {
+            id: "enr-3",
+            student_id: "stu-2",
+            semester_year_id: "sy-1",
+            subject_id: "sub-1",
             student_name: "Ziad",
             student_code: null,
             student_email: null,
             student_phone: null,
-          },
-        ]);
-      if (cmd === "get_unenrolled_students")
-        return Promise.resolve([
-          {
-            id: "stu-2",
-            name: "Sara",
-            email: null,
-            student_id: "2026-0099",
-            phone: null,
+            section_name: "Group A",
           },
         ]);
       return Promise.resolve(undefined);
     });
+    useFilterStore.setState({ selectedSectionId: "__all__" });
 
-    const user = userEvent.setup();
     render(<Students />);
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith(
-        "get_unenrolled_students",
-        enrollmentsCall
-      )
-    );
-
-    // Enrolled tab first: Ziad visible, Sara not.
-    expect(screen.getByText("Ziad")).toBeInTheDocument();
-    expect(screen.queryByText("Sara")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Not enrolled" }));
-
-    await waitFor(() => expect(screen.getByText("Sara")).toBeInTheDocument());
-    expect(screen.queryByText("Ziad")).not.toBeInTheDocument();
-    expect(screen.getByText("1 student not enrolled")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Enroll" }));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("create_enrollment", {
-        studentId: "stu-2",
+      expect(invoke).toHaveBeenCalledWith("get_enrollments", {
         ...enrollmentsCall,
+        sectionId: null,
       })
     );
-  });
 
-  it("shows an all-enrolled empty state when nobody is unenrolled", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_enrollments") return Promise.resolve([]);
-      if (cmd === "get_unenrolled_students") return Promise.resolve([]);
-      return Promise.resolve(undefined);
-    });
-
-    const user = userEvent.setup();
-    render(<Students />);
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith(
-        "get_unenrolled_students",
-        enrollmentsCall
-      )
-    );
-
-    await user.click(screen.getByRole("button", { name: "Not enrolled" }));
+    // Bob appears once, with both sections listed.
+    expect(screen.getAllByText("Bob")).toHaveLength(1);
+    expect(screen.getByText("Group A, Group B")).toBeInTheDocument();
+    expect(screen.getByText("Sections")).toBeInTheDocument();
+    expect(screen.getByText("2 students enrolled")).toBeInTheDocument();
+    // No concrete section to enroll into — the Add button is hidden.
     expect(
-      await screen.findByText("Everyone is enrolled in this section.")
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "+ Add Student" })
+    ).not.toBeInTheDocument();
   });
 
   it("copy button invokes clipboard with the phone number", async () => {

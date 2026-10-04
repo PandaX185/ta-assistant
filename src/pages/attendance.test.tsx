@@ -39,6 +39,22 @@ beforeEach(() => {
   });
 });
 
+describe("Attendance section filter", () => {
+  it("shows the no-filter state when All sections is picked", async () => {
+    useFilterStore.setState({ selectedSectionId: "__all__" });
+    render(
+      <MemoryRouter initialEntries={["/attendance"]}>
+        <Routes>
+          <Route path="attendance" element={<Attendance />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No filter selected.")).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("get_lectures", expect.anything());
+  });
+});
+
 describe("Attendance lecture rows", () => {
   it("has a Materials link that opens the lecture view without selecting the row", async () => {
     render(
@@ -47,7 +63,7 @@ describe("Attendance lecture rows", () => {
           <Route path="attendance" element={<Attendance />} />
           <Route path="lectures/:id" element={<div>MATERIALS_PAGE</div>} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     const user = userEvent.setup();
@@ -58,7 +74,7 @@ describe("Attendance lecture rows", () => {
     await waitFor(() =>
       expect(invoke).not.toHaveBeenCalledWith("get_attendance", {
         lectureId: "lec-1",
-      }),
+      })
     );
     expect(await screen.findByText("MATERIALS_PAGE")).toBeInTheDocument();
   });

@@ -4308,7 +4308,7 @@ dependencies = [
 
 [[package]]
 name = "ta-assistant"
-version = "1.4.2"
+version = "1.5.0"
 dependencies = [
  "argon2",
  "calamine",

@@ -28,7 +28,9 @@ const detail = {
       status: "absent",
     },
   ],
-  bonuses: [{ id: "b1", value: 2, reason: "Participation", date: "2026-09-02" }],
+  bonuses: [
+    { id: "b1", value: 2, reason: "Participation", date: "2026-09-02" },
+  ],
 };
 
 beforeEach(() => {
@@ -43,7 +45,7 @@ describe("StudentDetailDialog", () => {
         onClose={vi.fn()}
         onDeleted={vi.fn()}
         onEdit={vi.fn()}
-      />,
+      />
     );
     expect(container).toBeEmptyDOMElement();
     expect(invoke).not.toHaveBeenCalled();
@@ -57,15 +59,19 @@ describe("StudentDetailDialog", () => {
         onClose={vi.fn()}
         onDeleted={vi.fn()}
         onEdit={vi.fn()}
-      />,
+      />
     );
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_student_detail", { enrollmentId: "10" }),
+      expect(invoke).toHaveBeenCalledWith("get_student_detail", {
+        enrollmentId: "10",
+      })
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: "Alice Smith" })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("heading", { name: "Alice Smith" })
+      ).toBeInTheDocument()
     );
     expect(screen.getByText("CS-101")).toBeInTheDocument();
     expect(screen.getByText("alice@uni.edu")).toBeInTheDocument();
@@ -112,13 +118,13 @@ describe("StudentDetailDialog", () => {
         onClose={vi.fn()}
         onDeleted={vi.fn()}
         onEdit={vi.fn()}
-      />,
+      />
     );
 
     await waitFor(() =>
       expect(
-        screen.getByText("No grades, attendance, or bonuses recorded yet."),
-      ).toBeInTheDocument(),
+        screen.getByText("No grades, attendance, or bonuses recorded yet.")
+      ).toBeInTheDocument()
     );
   });
 
@@ -132,7 +138,7 @@ describe("StudentDetailDialog", () => {
         onClose={vi.fn()}
         onDeleted={vi.fn()}
         onEdit={vi.fn()}
-      />,
+      />
     );
 
     expect(screen.getAllByText("Loading…").length).toBeGreaterThan(0);
@@ -149,12 +155,88 @@ describe("StudentDetailDialog", () => {
         onClose={vi.fn()}
         onDeleted={vi.fn()}
         onEdit={onEdit}
-      />,
+      />
     );
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument()
+    );
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(onEdit).toHaveBeenCalledWith("10");
+  });
+
+  it("adds a bonus and reloads the detail", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "create_bonus") return Promise.resolve("b2");
+      return Promise.resolve(detail);
+    });
+    const user = userEvent.setup();
+    render(
+      <StudentDetailDialog
+        enrollmentId="10"
+        onClose={vi.fn()}
+        onDeleted={vi.fn()}
+        onEdit={vi.fn()}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Participation")).toBeInTheDocument()
+    );
+    await user.type(screen.getByLabelText("Value"), "1.5");
+    await user.type(screen.getByLabelText("Reason"), "Helping");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("create_bonus", {
+        enrollmentId: "10",
+        value: 1.5,
+        reason: "Helping",
+      })
+    );
+    // Detail reloads so the new total shows.
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(invoke)
+          .mock.calls.filter(([cmd]) => cmd === "get_student_detail")
+      ).toHaveLength(2)
+    );
+  });
+
+  it("deletes a bonus after confirmation", async () => {
+    vi.mocked(invoke).mockResolvedValue(detail);
+    const user = userEvent.setup();
+    render(
+      <StudentDetailDialog
+        enrollmentId="10"
+        onClose={vi.fn()}
+        onDeleted={vi.fn()}
+        onEdit={vi.fn()}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Participation")).toBeInTheDocument()
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Delete bonus: Participation" })
+    );
+
+    const alert = await screen.findByRole("alertdialog");
+    expect(within(alert).getByText("Delete this bonus?")).toBeInTheDocument();
+    await user.click(within(alert).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("delete_bonus", { id: "b1" })
+    );
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(invoke)
+          .mock.calls.filter(([cmd]) => cmd === "get_student_detail")
+      ).toHaveLength(2)
+    );
   });
 
   it("deletes the student after confirmation", async () => {
@@ -167,11 +249,11 @@ describe("StudentDetailDialog", () => {
         onClose={vi.fn()}
         onDeleted={onDeleted}
         onEdit={vi.fn()}
-      />,
+      />
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument()
     );
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
@@ -182,7 +264,7 @@ describe("StudentDetailDialog", () => {
     await user.click(within(alert).getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("delete_student", { id: "2026-0042" }),
+      expect(invoke).toHaveBeenCalledWith("delete_student", { id: "2026-0042" })
     );
     await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
   });

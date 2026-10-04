@@ -57,15 +57,12 @@ describe("FilterBar", () => {
     render(<FilterBar />);
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_semester_years"),
+      expect(invoke).toHaveBeenCalledWith("get_semester_years")
     );
     await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
     expect(useFilterStore.getState().semesterYears).toEqual(semesterYears);
     // No semester selected yet → subjects must NOT be fetched globally.
-    expect(invoke).not.toHaveBeenCalledWith(
-      "get_subjects",
-      expect.anything(),
-    );
+    expect(invoke).not.toHaveBeenCalledWith("get_subjects", expect.anything());
   });
 
   it("renders semester and subject selects with their values", async () => {
@@ -89,16 +86,16 @@ describe("FilterBar", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("get_subjects", {
         semesterYearId: "2",
-      }),
+      })
     );
     await waitFor(() =>
-      expect(useFilterStore.getState().subjects).toEqual(subjects),
+      expect(useFilterStore.getState().subjects).toEqual(subjects)
     );
 
     // Select a subject
     await user.click(screen.getAllByRole("combobox")[1]);
     await user.click(
-      await screen.findByRole("option", { name: "[DB] Databases" }),
+      await screen.findByRole("option", { name: "[DB] Databases" })
     );
     expect(useFilterStore.getState().selectedSubjectId).toBe("3");
   });
@@ -125,6 +122,35 @@ describe("FilterBar", () => {
     expect(screen.getByText("Group A")).toBeInTheDocument();
   });
 
+  it("offers All sections and keeps the selection across reloads", async () => {
+    mockDefaults({ subjects: [subjects[0]], sections });
+    render(<FilterBar />);
+
+    await waitFor(() => expect(useFilterStore.getState().loaded).toBe(true));
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("combobox")[0]);
+    await user.click(await screen.findByRole("option", { name: "2026 Fall" }));
+
+    // Sections load for the auto-selected single subject.
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_sections", {
+        semesterYearId: "2",
+        subjectId: "3",
+      })
+    );
+
+    await user.click(screen.getAllByRole("combobox")[2]);
+    await user.click(
+      await screen.findByRole("option", { name: "All sections" })
+    );
+    expect(useFilterStore.getState().selectedSectionId).toBe("__all__");
+
+    // A sections reload (e.g. subject data refresh) must not wipe All.
+    await useFilterStore.getState().loadSections();
+    expect(useFilterStore.getState().selectedSectionId).toBe("__all__");
+  });
+
   it("shows section placeholder when semester+subject have no sections", async () => {
     mockDefaults({ sections: [] });
     render(<FilterBar />);
@@ -135,7 +161,7 @@ describe("FilterBar", () => {
     await user.click(await screen.findByRole("option", { name: "2026 Fall" }));
     await user.click(screen.getAllByRole("combobox")[1]);
     await user.click(
-      await screen.findByRole("option", { name: "[DB] Databases" }),
+      await screen.findByRole("option", { name: "[DB] Databases" })
     );
 
     await user.click(screen.getAllByRole("combobox")[2]);
@@ -152,14 +178,14 @@ describe("FilterBar", () => {
 
     await user.click(semesterTrigger);
     expect(
-      await screen.findByText("No semesters yet — create one in Settings"),
+      await screen.findByText("No semesters yet — create one in Settings")
     ).toBeInTheDocument();
 
     // Close the semester dropdown first: while a listbox is open, Radix
     // disables pointer events on everything else on the page.
     fireEvent.keyDown(semesterTrigger, { key: "Escape" });
     await waitFor(() =>
-      expect(semesterTrigger).toHaveAttribute("aria-expanded", "false"),
+      expect(semesterTrigger).toHaveAttribute("aria-expanded", "false")
     );
 
     await user.click(subjectTrigger);
@@ -171,7 +197,7 @@ describe("FilterBar", () => {
     render(<FilterBar />);
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_semester_years"),
+      expect(invoke).toHaveBeenCalledWith("get_semester_years")
     );
     await new Promise((r) => setTimeout(r, 50));
 

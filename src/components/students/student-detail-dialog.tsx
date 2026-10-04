@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import {
@@ -8,8 +8,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Trash2 } from "lucide-react";
 import { useCopyFeedback } from "@/lib/use-copy-feedback";
 import {
   AlertDialog,
@@ -70,24 +71,78 @@ interface Props {
   onEdit: (enrollmentId: string) => void;
 }
 
-export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }: Props) {
+export function StudentDetailDialog({
+  enrollmentId,
+  onClose,
+  onDeleted,
+  onEdit,
+}: Props) {
   const { t } = useTranslation();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const { copy, isCopied } = useCopyFeedback();
 
-  useEffect(() => {
+  // Bonus add/remove
+  const [bonusValue, setBonusValue] = useState("");
+  const [bonusReason, setBonusReason] = useState("");
+  const [savingBonus, setSavingBonus] = useState(false);
+  const [bonusToDelete, setBonusToDelete] = useState<BonusItem | null>(null);
+
+  const loadDetail = useCallback(async () => {
     if (!enrollmentId) {
       setDetail(null);
       return;
     }
     setLoading(true);
-    invoke<StudentDetail>("get_student_detail", { enrollmentId })
-      .then(setDetail)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    try {
+      const data = await invoke<StudentDetail>("get_student_detail", {
+        enrollmentId,
+      });
+      setDetail(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   }, [enrollmentId]);
+
+  useEffect(() => {
+    loadDetail();
+  }, [loadDetail]);
+
+  const handleAddBonus = async () => {
+    if (!enrollmentId) return;
+    const value = parseFloat(bonusValue);
+    if (!Number.isFinite(value) || !bonusReason.trim()) return;
+    setSavingBonus(true);
+    try {
+      await invoke("create_bonus", {
+        enrollmentId,
+        value,
+        reason: bonusReason.trim(),
+      });
+      setBonusValue("");
+      setBonusReason("");
+      await loadDetail();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingBonus(false);
+    }
+  };
+
+  const handleDeleteBonus = async () => {
+    if (!bonusToDelete) return;
+    try {
+      await invoke("delete_bonus", { id: bonusToDelete.id });
+      await loadDetail();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBonusToDelete(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (!detail) return;
@@ -104,22 +159,29 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
   if (!enrollmentId) return null;
 
   // Calculate totals
-  const quizTotal = detail?.quizzes.reduce((sum, q) => sum + (q.score ?? 0), 0) ?? 0;
+  const quizTotal =
+    detail?.quizzes.reduce((sum, q) => sum + (q.score ?? 0), 0) ?? 0;
   const quizMax = detail?.quizzes.reduce((sum, q) => sum + q.max_score, 0) ?? 0;
-  const assignmentTotal = detail?.assignments.reduce((sum, a) => sum + (a.score ?? 0), 0) ?? 0;
-  const assignmentMax = detail?.assignments.reduce((sum, a) => sum + a.max_score, 0) ?? 0;
+  const assignmentTotal =
+    detail?.assignments.reduce((sum, a) => sum + (a.score ?? 0), 0) ?? 0;
+  const assignmentMax =
+    detail?.assignments.reduce((sum, a) => sum + a.max_score, 0) ?? 0;
   const bonusTotal = detail?.bonuses.reduce((sum, b) => sum + b.value, 0) ?? 0;
   const grandTotal = quizTotal + assignmentTotal + bonusTotal;
   const grandMax = quizMax + assignmentMax;
-  const presentCount = detail?.attendance.filter((a) => a.status === "present").length ?? 0;
+  const presentCount =
+    detail?.attendance.filter((a) => a.status === "present").length ?? 0;
   const attTotal = detail?.attendance.length ?? 0;
-  const attPct = attTotal > 0 ? Math.round((presentCount / attTotal) * 100) : null;
+  const attPct =
+    attTotal > 0 ? Math.round((presentCount / attTotal) * 100) : null;
 
   const statusBadge = (status: string) => {
     const colors: Record<string, string> = {
-      present: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      present:
+        "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
       absent: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-      excused: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+      excused:
+        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
       late: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
     };
     return colors[status] ?? "bg-gray-100 text-gray-800";
@@ -127,7 +189,12 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
 
   return (
     <>
-      <Dialog open={true} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <Dialog
+        open={true}
+        onOpenChange={(v) => {
+          if (!v) onClose();
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-start justify-between">
@@ -168,7 +235,9 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
           </DialogHeader>
 
           {loading && (
-            <div className="py-12 text-center text-muted-foreground">{t("common.loading")}</div>
+            <div className="py-12 text-center text-muted-foreground">
+              {t("common.loading")}
+            </div>
           )}
 
           {!loading && detail && (
@@ -183,8 +252,12 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">{t("common.name")}</th>
-                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.score")}</th>
+                          <th className="text-left px-3 py-1.5 font-medium">
+                            {t("common.name")}
+                          </th>
+                          <th className="text-right px-3 py-1.5 font-medium">
+                            {t("studentDetail.score")}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -192,12 +265,16 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                           <tr key={q.id} className="border-t">
                             <td className="px-3 py-1.5">{q.name}</td>
                             <td className="px-3 py-1.5 text-right font-mono">
-                              {q.score !== null ? `${q.score} / ${q.max_score}` : "—"}
+                              {q.score !== null
+                                ? `${q.score} / ${q.max_score}`
+                                : "—"}
                             </td>
                           </tr>
                         ))}
                         <tr className="border-t font-medium bg-muted/30">
-                          <td className="px-3 py-1.5">{t("studentDetail.total")}</td>
+                          <td className="px-3 py-1.5">
+                            {t("studentDetail.total")}
+                          </td>
                           <td className="px-3 py-1.5 text-right font-mono">
                             {quizTotal.toFixed(1)} / {quizMax.toFixed(1)}
                           </td>
@@ -218,8 +295,12 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">{t("common.name")}</th>
-                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.score")}</th>
+                          <th className="text-left px-3 py-1.5 font-medium">
+                            {t("common.name")}
+                          </th>
+                          <th className="text-right px-3 py-1.5 font-medium">
+                            {t("studentDetail.score")}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -227,14 +308,19 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                           <tr key={a.id} className="border-t">
                             <td className="px-3 py-1.5">{a.name}</td>
                             <td className="px-3 py-1.5 text-right font-mono">
-                              {a.score !== null ? `${a.score} / ${a.max_score}` : "—"}
+                              {a.score !== null
+                                ? `${a.score} / ${a.max_score}`
+                                : "—"}
                             </td>
                           </tr>
                         ))}
                         <tr className="border-t font-medium bg-muted/30">
-                          <td className="px-3 py-1.5">{t("studentDetail.total")}</td>
+                          <td className="px-3 py-1.5">
+                            {t("studentDetail.total")}
+                          </td>
                           <td className="px-3 py-1.5 text-right font-mono">
-                            {assignmentTotal.toFixed(1)} / {assignmentMax.toFixed(1)}
+                            {assignmentTotal.toFixed(1)} /{" "}
+                            {assignmentMax.toFixed(1)}
                           </td>
                         </tr>
                       </tbody>
@@ -251,7 +337,10 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                       {t("studentDetail.attendance")}
                     </h3>
                     <span className="text-xs text-muted-foreground">
-                      {t("studentDetail.present_count", { count: presentCount, total: attTotal })}
+                      {t("studentDetail.present_count", {
+                        count: presentCount,
+                        total: attTotal,
+                      })}
                       {attPct !== null ? ` (${attPct}%)` : ""}
                     </span>
                   </div>
@@ -259,16 +348,26 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">{t("common.date")}</th>
-                          <th className="text-left px-3 py-1.5 font-medium">{t("studentDetail.topic")}</th>
-                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.status")}</th>
+                          <th className="text-left px-3 py-1.5 font-medium">
+                            {t("common.date")}
+                          </th>
+                          <th className="text-left px-3 py-1.5 font-medium">
+                            {t("studentDetail.topic")}
+                          </th>
+                          <th className="text-right px-3 py-1.5 font-medium">
+                            {t("studentDetail.status")}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {detail.attendance.map((a) => (
                           <tr key={a.id ?? a.lecture_id} className="border-t">
-                            <td className="px-3 py-1.5 font-mono text-xs">{a.lecture_date}</td>
-                            <td className="px-3 py-1.5">{a.lecture_title ?? "—"}</td>
+                            <td className="px-3 py-1.5 font-mono text-xs">
+                              {a.lecture_date}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              {a.lecture_title ?? "—"}
+                            </td>
                             <td className="px-3 py-1.5 text-right">
                               <span
                                 className={`inline-block px-2 py-0.5 rounded text-xs font-medium capitalize ${statusBadge(a.status)}`}
@@ -284,57 +383,114 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
                 </section>
               )}
 
-              {/* Bonuses & Deductions */}
-              {detail.bonuses.length > 0 && (
-                <section>
-                  <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-2">
-                    {t("studentDetail.bonuses")}
-                  </h3>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="text-left px-3 py-1.5 font-medium">{t("studentDetail.reason")}</th>
-                          <th className="text-right px-3 py-1.5 font-medium">{t("studentDetail.value")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detail.bonuses.map((b) => (
-                          <tr key={b.id} className="border-t">
-                            <td className="px-3 py-1.5">{b.reason}</td>
-                            <td
-                              className={`px-3 py-1.5 text-right font-mono ${
-                                b.value >= 0 ? "text-green-600" : "text-red-600"
-                              }`}
-                            >
-                              {b.value >= 0 ? "+" : ""}
-                              {b.value}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="border-t font-medium bg-muted/30">
-                          <td className="px-3 py-1.5">{t("studentDetail.total_bonus")}</td>
+              {/* Bonuses & Deductions — always visible so the first bonus
+                  can be added; negatives are deductions */}
+              <section>
+                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-2">
+                  {t("studentDetail.bonuses")}
+                </h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 font-medium">
+                          {t("studentDetail.reason")}
+                        </th>
+                        <th className="text-right px-3 py-1.5 font-medium">
+                          {t("studentDetail.value")}
+                        </th>
+                        <th className="w-10" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.bonuses.map((b) => (
+                        <tr key={b.id} className="border-t">
+                          <td className="px-3 py-1.5">{b.reason}</td>
                           <td
                             className={`px-3 py-1.5 text-right font-mono ${
-                              bonusTotal >= 0 ? "text-green-600" : "text-red-600"
+                              b.value >= 0 ? "text-green-600" : "text-red-600"
+                            }`}
+                          >
+                            {b.value >= 0 ? "+" : ""}
+                            {b.value}
+                          </td>
+                          <td className="px-1 py-1.5 text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              aria-label={t("studentDetail.delete_bonus", {
+                                reason: b.reason,
+                              })}
+                              onClick={() => setBonusToDelete(b)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {detail.bonuses.length > 0 && (
+                        <tr className="border-t font-medium bg-muted/30">
+                          <td className="px-3 py-1.5">
+                            {t("studentDetail.total_bonus")}
+                          </td>
+                          <td
+                            className={`px-3 py-1.5 text-right font-mono ${
+                              bonusTotal >= 0
+                                ? "text-green-600"
+                                : "text-red-600"
                             }`}
                           >
                             {bonusTotal >= 0 ? "+" : ""}
                             {bonusTotal.toFixed(1)}
                           </td>
+                          <td />
                         </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    className="w-24"
+                    type="number"
+                    inputMode="decimal"
+                    dir="ltr"
+                    placeholder={t("studentDetail.bonus_value_placeholder")}
+                    aria-label={t("studentDetail.value")}
+                    value={bonusValue}
+                    onChange={(e) => setBonusValue(e.target.value)}
+                  />
+                  <Input
+                    className="flex-1"
+                    placeholder={t("studentDetail.bonus_reason_placeholder")}
+                    aria-label={t("studentDetail.reason")}
+                    value={bonusReason}
+                    onChange={(e) => setBonusReason(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleAddBonus}
+                    disabled={
+                      savingBonus ||
+                      !Number.isFinite(parseFloat(bonusValue)) ||
+                      !bonusReason.trim()
+                    }
+                  >
+                    {t("studentDetail.add_bonus")}
+                  </Button>
+                </div>
+              </section>
 
               {/* Empty state for each section */}
-              {detail.quizzes.length === 0 && detail.assignments.length === 0 && detail.attendance.length === 0 && detail.bonuses.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  {t("studentDetail.no_records")}
-                </p>
-              )}
+              {detail.quizzes.length === 0 &&
+                detail.assignments.length === 0 &&
+                detail.attendance.length === 0 &&
+                detail.bonuses.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {t("studentDetail.no_records")}
+                  </p>
+                )}
 
               <Separator />
 
@@ -342,10 +498,21 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <p className="text-sm text-muted-foreground">
-                    {t("studentDetail.grand_quizzes", { value: `${quizTotal.toFixed(1)}/${quizMax.toFixed(1)}` })}
+                    {t("studentDetail.grand_quizzes", {
+                      value: `${quizTotal.toFixed(1)}/${quizMax.toFixed(1)}`,
+                    })}
                     {" · "}
-                    {t("studentDetail.grand_assignments", { value: `${assignmentTotal.toFixed(1)}/${assignmentMax.toFixed(1)}` })}
-                    {bonusTotal !== 0 && <>{" · "}{t("studentDetail.grand_bonus", { value: `${bonusTotal >= 0 ? "+" : ""}${bonusTotal.toFixed(1)}` })}</>}
+                    {t("studentDetail.grand_assignments", {
+                      value: `${assignmentTotal.toFixed(1)}/${assignmentMax.toFixed(1)}`,
+                    })}
+                    {bonusTotal !== 0 && (
+                      <>
+                        {" · "}
+                        {t("studentDetail.grand_bonus", {
+                          value: `${bonusTotal >= 0 ? "+" : ""}${bonusTotal.toFixed(1)}`,
+                        })}
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="text-right">
@@ -387,13 +554,47 @@ export function StudentDetailDialog({ enrollmentId, onClose, onDeleted, onEdit }
         </DialogContent>
       </Dialog>
 
+      {/* Bonus delete confirmation */}
+      <AlertDialog
+        open={bonusToDelete !== null}
+        onOpenChange={(v) => {
+          if (!v) setBonusToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("studentDetail.delete_bonus_confirm")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("studentDetail.delete_bonus_desc_1")}{" "}
+              <strong>{bonusToDelete?.reason}</strong> (
+              {bonusToDelete && bonusToDelete.value >= 0 ? "+" : ""}
+              {bonusToDelete?.value}) {t("studentDetail.delete_bonus_desc_2")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteBonus}
+            >
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Delete confirmation */}
       <AlertDialog open={deleteConfirm} onOpenChange={setDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("studentDetail.delete_confirm")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("studentDetail.delete_confirm")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("studentDetail.delete_confirm_desc_1")} <strong>{detail?.student_name}</strong>{" "}
+              {t("studentDetail.delete_confirm_desc_1")}{" "}
+              <strong>{detail?.student_name}</strong>{" "}
               {t("studentDetail.delete_confirm_desc_2")}
             </AlertDialogDescription>
           </AlertDialogHeader>
