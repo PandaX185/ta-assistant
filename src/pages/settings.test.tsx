@@ -12,6 +12,10 @@ import {
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
 import { useFilterStore } from "@/stores/filter-store";
+import {
+  useSettingsStore,
+  type SettingsSection,
+} from "@/stores/settings-store";
 import Settings from "./settings";
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -58,6 +62,7 @@ beforeEach(() => {
     selectedSectionId: null,
     loaded: true,
   });
+  useSettingsStore.setState({ section: "semesters" });
 });
 
 function mockInvoke() {
@@ -75,8 +80,10 @@ function mockInvoke() {
   });
 }
 
-async function openTab(user: ReturnType<typeof userEvent.setup>, name: string) {
-  await user.click(screen.getByRole("button", { name }));
+// Sections are picked from the top-bar burger menu in the real app; in these
+// tests the store is driven directly.
+function openTab(name: string) {
+  useSettingsStore.setState({ section: name.toLowerCase() as SettingsSection });
 }
 
 describe("Settings", () => {
@@ -85,7 +92,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Sections");
+    openTab("Sections");
 
     // Semester defaults to the first one → its subjects load.
     await waitFor(() =>
@@ -146,7 +153,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Subjects");
+    openTab("Subjects");
 
     // Default semester sy-1 shows its subject.
     await waitFor(() =>
@@ -180,10 +187,9 @@ describe("Settings", () => {
 
   it("disables the section Add button until a subject is chosen", async () => {
     mockInvoke();
-    const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Sections");
+    openTab("Sections");
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "+ Add" })).toBeDisabled()
@@ -309,10 +315,9 @@ describe("Settings", () => {
 
   it("gates import/export until semester, subject and section are chosen", async () => {
     mockInvoke();
-    const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Data");
+    openTab("Data");
 
     expect(
       await screen.findByText(/Select a semester, subject and section/)
@@ -346,7 +351,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Data");
+    openTab("Data");
     await user.click(
       await screen.findByRole("button", { name: "Export section (Excel)" })
     );
@@ -397,7 +402,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Data");
+    openTab("Data");
     await user.click(
       await screen.findByRole("button", { name: "Import Excel…" })
     );
@@ -472,7 +477,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Data");
+    openTab("Data");
     await user.click(
       await screen.findByRole("button", { name: "Import Excel…" })
     );
@@ -505,7 +510,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Data");
+    openTab("Data");
     await user.click(
       await screen.findByRole("button", { name: "Create backup…" })
     );
@@ -532,7 +537,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     render(<Settings />);
 
-    await openTab(user, "Data");
+    openTab("Data");
     await user.click(
       await screen.findByRole("button", { name: "Restore from backup…" })
     );
@@ -547,6 +552,116 @@ describe("Settings", () => {
     );
     expect(
       await screen.findByText(/Restored 13 tables \(42 rows\)/)
+    ).toBeInTheDocument();
+  });
+
+  it("loads and saves the profile", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_preferences")
+        return Promise.resolve({ name: "Abdullah", email: "a@x.com" });
+      return Promise.resolve(undefined);
+    });
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    openTab("Profile");
+    const nameInput = (await screen.findByLabelText(
+      "Name"
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe("Abdullah");
+    expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe(
+      "a@x.com"
+    );
+
+    await user.clear(nameInput);
+    await user.type(nameInput, "  Sara Omar  ");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("update_profile", {
+        name: "Sara Omar",
+        email: "a@x.com",
+      })
+    );
+    expect(await screen.findByText("Profile updated.")).toBeInTheDocument();
+  });
+
+  it("changes the password after verifying the current one", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_preferences")
+        return Promise.resolve({ name: "Abdullah", email: "a@x.com" });
+      if (cmd === "update_password") return Promise.resolve(undefined);
+      return Promise.resolve(undefined);
+    });
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    openTab("Profile");
+    await screen.findByLabelText("Name");
+
+    await user.type(screen.getByLabelText("Current password"), "secret123");
+    await user.type(screen.getByLabelText("New password"), "newpass456");
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "newpass456"
+    );
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("update_password", {
+        currentPassword: "secret123",
+        newPassword: "newpass456",
+      })
+    );
+    expect(await screen.findByText("Password updated.")).toBeInTheDocument();
+    // Fields clear on success.
+    expect(
+      (screen.getByLabelText("Current password") as HTMLInputElement).value
+    ).toBe("");
+  });
+
+  it("blocks short and mismatched passwords, and surfaces a wrong current password", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_preferences")
+        return Promise.resolve({ name: "Abdullah", email: "a@x.com" });
+      if (cmd === "update_password")
+        return Promise.reject("Current password is incorrect");
+      return Promise.resolve(undefined);
+    });
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    openTab("Profile");
+    await screen.findByLabelText("Name");
+
+    // Too short: button stays disabled with an inline hint.
+    await user.type(screen.getByLabelText("Current password"), "secret123");
+    await user.type(screen.getByLabelText("New password"), "abc");
+    expect(
+      screen.getByRole("button", { name: "Change password" })
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Must be at least 6 characters")
+    ).toBeInTheDocument();
+
+    // Mismatch: disabled with a mismatch hint.
+    await user.clear(screen.getByLabelText("New password"));
+    await user.type(screen.getByLabelText("New password"), "newpass456");
+    await user.type(screen.getByLabelText("Confirm new password"), "different");
+    expect(
+      screen.getByRole("button", { name: "Change password" })
+    ).toBeDisabled();
+    expect(screen.getByText("Passwords don't match")).toBeInTheDocument();
+
+    // Backend rejection surfaces the friendly message.
+    await user.clear(screen.getByLabelText("Confirm new password"));
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "newpass456"
+    );
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+    expect(
+      await screen.findByText("Current password is incorrect.")
     ).toBeInTheDocument();
   });
 });

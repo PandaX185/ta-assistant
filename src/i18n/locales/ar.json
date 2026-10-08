@@ -160,7 +160,17 @@
 
     "delete_student": "حذف الطالب؟",
     "delete_student_desc_1": "هيتم حذف",
-    "delete_student_desc_2": "بشكل نهائي مع كل درجاته وسجلات الحضور بتاعته. مفيش تراجع."
+    "delete_student_desc_2": "بشكل نهائي مع كل درجاته وسجلات الحضور بتاعته. مفيش تراجع.",
+    "move_section": "نقل",
+    "move_section_title": "نقل لمجموعة تانية",
+    "move_section_desc": "نقل {{name}} لمجموعة تانية. كل الدرجات والواجبات والمكافآت والحضور هيتنقلوا معاه.",
+    "move_target_label": "المجموعة الجديدة",
+    "move_target_placeholder": "اختار المجموعة",
+    "move_confirm": "نقل",
+    "unenroll": "إلغاء التسجيل",
+    "unenroll_confirm": "إلغاء التسجيل من المادة دي؟",
+    "unenroll_desc_1": "هيتم إزالة",
+    "unenroll_desc_2": "من المادة دي مع درجاته وسجلات الحضور والمكافآت بتاعته في المادة دي. بيانات الطالب نفسها هتفضل موجودة."
   },
   "grades": {
     "title": "الدرجات",
@@ -296,7 +306,18 @@
     "select_semester_first": "اختار فصل دراسي الأول",
     "select_sem_and_sub": "اختار فصل دراسي ومادة عشان تشوف الشُعب.",
     "no_sections_for": "لسه مفيش شُعب لـ{{subject}}.",
-    "this_subject": "المادة دي"
+    "this_subject": "المادة دي",
+    "tab_profile": "الحساب",
+    "profile_desc": "اسمك وبريدك. كلمة المرور بتفتح التطبيق.",
+    "profile_saved": "اتحفظت البيانات.",
+    "profile_save_failed": "مقدرناش نحفظ البيانات.",
+    "profile_password_heading": "تغيير كلمة المرور",
+    "profile_current_password": "كلمة المرور الحالية",
+    "profile_new_password": "كلمة المرور الجديدة",
+    "profile_confirm_password": "تأكيد كلمة المرور الجديدة",
+    "profile_change_password": "تغيير كلمة المرور",
+    "profile_wrong_current": "كلمة المرور الحالية غلط.",
+    "profile_password_updated": "اتغيرت كلمة المرور."
   },
   "updates": {
     "title": "التحديثات",

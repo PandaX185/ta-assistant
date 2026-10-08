@@ -4,6 +4,25 @@ mod db;
 #[cfg(desktop)]
 use tauri::Emitter;
 
+// Fallback search hotkey when nothing valid is stored (first run, or a
+// persisted value the OS rejects).
+#[cfg(desktop)]
+pub(crate) const DEFAULT_SEARCH_SHORTCUT: &str = "Ctrl+Shift+P";
+
+/// (Re-)registers the search hotkey. `unregister_all` first so a changed
+/// shortcut doesn't stack on top of the old one; falls back to the default
+/// when the value can't be parsed. Best effort by design — a failed
+/// registration must never break startup or onboarding.
+#[cfg(desktop)]
+pub(crate) fn register_search_shortcut(app: &tauri::AppHandle, shortcut: &str) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let guard = app.global_shortcut();
+    let _ = guard.unregister_all();
+    if guard.register(shortcut).is_err() {
+        let _ = guard.register(DEFAULT_SEARCH_SHORTCUT);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // NOTE: migrations are NOT registered with the sql plugin anymore. They
@@ -38,11 +57,19 @@ pub fn run() {
     );
 
     builder
-        .setup(|_app| {
+        .setup(|app| {
             #[cfg(desktop)]
             {
-                use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                _app.global_shortcut().register("Ctrl+Shift+P")?;
+                // Register the saved hotkey (or the default on first run).
+                // Best effort: a broken registration falls back inside
+                // register_search_shortcut and never fails startup.
+                let shortcut = crate::db::open_db(app.handle())
+                    .ok()
+                    .and_then(|conn| crate::commands::preferences::get_preferences_impl(&conn).ok())
+                    .and_then(|prefs| prefs)
+                    .map(|prefs| prefs.global_shortcut)
+                    .unwrap_or_else(|| DEFAULT_SEARCH_SHORTCUT.to_string());
+                crate::register_search_shortcut(app.handle(), &shortcut);
             }
             Ok(())
         })
@@ -53,6 +80,8 @@ pub fn run() {
             commands::preferences::update_theme,
             commands::preferences::update_locale,
             commands::preferences::set_guide_seen,
+            commands::preferences::update_profile,
+            commands::preferences::update_password,
             commands::filters::get_semester_years,
             commands::filters::get_subjects,
             commands::filters::create_semester_year,
@@ -67,6 +96,7 @@ pub fn run() {
             commands::students::get_enrollments,
             commands::students::create_enrollment,
             commands::students::delete_enrollment,
+            commands::students::transfer_enrollment,
             commands::students::get_student_detail,
             commands::students::find_students,
             commands::sections::get_sections,

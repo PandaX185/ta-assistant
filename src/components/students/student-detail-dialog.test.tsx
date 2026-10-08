@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
+import { useFilterStore } from "@/stores/filter-store";
 import { StudentDetailDialog } from "./student-detail-dialog";
 
 const detail = {
@@ -31,10 +32,12 @@ const detail = {
   bonuses: [
     { id: "b1", value: 2, reason: "Participation", date: "2026-09-02" },
   ],
+  section_id: "sec-1",
 };
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  useFilterStore.setState({ sections: [] });
 });
 
 describe("StudentDetailDialog", () => {
@@ -44,6 +47,7 @@ describe("StudentDetailDialog", () => {
         enrollmentId={null}
         onClose={vi.fn()}
         onDeleted={vi.fn()}
+        onChanged={vi.fn()}
         onEdit={vi.fn()}
       />
     );
@@ -58,6 +62,7 @@ describe("StudentDetailDialog", () => {
         enrollmentId="10"
         onClose={vi.fn()}
         onDeleted={vi.fn()}
+        onChanged={vi.fn()}
         onEdit={vi.fn()}
       />
     );
@@ -111,12 +116,14 @@ describe("StudentDetailDialog", () => {
       assignments: [],
       attendance: [],
       bonuses: [],
+      section_id: "sec-1",
     });
     render(
       <StudentDetailDialog
         enrollmentId="10"
         onClose={vi.fn()}
         onDeleted={vi.fn()}
+        onChanged={vi.fn()}
         onEdit={vi.fn()}
       />
     );
@@ -137,6 +144,7 @@ describe("StudentDetailDialog", () => {
         enrollmentId="10"
         onClose={vi.fn()}
         onDeleted={vi.fn()}
+        onChanged={vi.fn()}
         onEdit={vi.fn()}
       />
     );
@@ -154,6 +162,7 @@ describe("StudentDetailDialog", () => {
         enrollmentId="10"
         onClose={vi.fn()}
         onDeleted={vi.fn()}
+        onChanged={vi.fn()}
         onEdit={onEdit}
       />
     );
@@ -176,6 +185,7 @@ describe("StudentDetailDialog", () => {
         enrollmentId="10"
         onClose={vi.fn()}
         onDeleted={vi.fn()}
+        onChanged={vi.fn()}
         onEdit={vi.fn()}
       />
     );
@@ -212,6 +222,7 @@ describe("StudentDetailDialog", () => {
         enrollmentId="10"
         onClose={vi.fn()}
         onDeleted={vi.fn()}
+        onChanged={vi.fn()}
         onEdit={vi.fn()}
       />
     );
@@ -248,6 +259,7 @@ describe("StudentDetailDialog", () => {
         enrollmentId="10"
         onClose={vi.fn()}
         onDeleted={onDeleted}
+        onChanged={vi.fn()}
         onEdit={vi.fn()}
       />
     );
@@ -267,5 +279,127 @@ describe("StudentDetailDialog", () => {
       expect(invoke).toHaveBeenCalledWith("delete_student", { id: "2026-0042" })
     );
     await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+  });
+
+  it("hides Move when there is no other section", async () => {
+    vi.mocked(invoke).mockResolvedValue(detail);
+    useFilterStore.setState({
+      sections: [
+        {
+          id: "sec-1",
+          subject_id: "sub-1",
+          semester_year_id: "sy-1",
+          name: "Group A",
+          color: null,
+        },
+      ],
+    });
+    render(
+      <StudentDetailDialog
+        enrollmentId="10"
+        onClose={vi.fn()}
+        onDeleted={vi.fn()}
+        onChanged={vi.fn()}
+        onEdit={vi.fn()}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Participation")).toBeInTheDocument()
+    );
+    expect(
+      screen.queryByRole("button", { name: "Move" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("moves the student to another section after confirmation", async () => {
+    vi.mocked(invoke).mockResolvedValue(detail);
+    useFilterStore.setState({
+      sections: [
+        {
+          id: "sec-1",
+          subject_id: "sub-1",
+          semester_year_id: "sy-1",
+          name: "Group A",
+          color: null,
+        },
+        {
+          id: "sec-2",
+          subject_id: "sub-1",
+          semester_year_id: "sy-1",
+          name: "Group B",
+          color: null,
+        },
+      ],
+    });
+    const onChanged = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <StudentDetailDialog
+        enrollmentId="10"
+        onClose={vi.fn()}
+        onDeleted={vi.fn()}
+        onChanged={onChanged}
+        onEdit={vi.fn()}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Move" })).toBeInTheDocument()
+    );
+    await user.click(screen.getByRole("button", { name: "Move" }));
+
+    const moveDialog = await screen.findByRole("dialog", {
+      name: "Move to Section",
+    });
+    await user.click(within(moveDialog).getByRole("combobox"));
+    // The current section is not offered as a target.
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["Group B"]);
+    await user.click(await screen.findByRole("option", { name: "Group B" }));
+    await user.click(within(moveDialog).getByRole("button", { name: "Move" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("transfer_enrollment", {
+        enrollmentId: "10",
+        targetSectionId: "sec-2",
+      })
+    );
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  });
+
+  it("unenrolls the student from the subject after confirmation", async () => {
+    vi.mocked(invoke).mockResolvedValue(detail);
+    const onChanged = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <StudentDetailDialog
+        enrollmentId="10"
+        onClose={vi.fn()}
+        onDeleted={vi.fn()}
+        onChanged={onChanged}
+        onEdit={vi.fn()}
+      />
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Unenroll" })
+      ).toBeInTheDocument()
+    );
+    await user.click(screen.getByRole("button", { name: "Unenroll" }));
+
+    const alert = await screen.findByRole("alertdialog");
+    expect(
+      within(alert).getByText("Unenroll from this subject?")
+    ).toBeInTheDocument();
+    expect(within(alert).getByText(/Alice Smith/)).toBeInTheDocument();
+
+    await user.click(within(alert).getByRole("button", { name: "Unenroll" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("delete_enrollment", { id: "10" })
+    );
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   });
 });

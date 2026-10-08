@@ -55,6 +55,46 @@ describe("Attendance section filter", () => {
   });
 });
 
+describe("Attendance seeding", () => {
+  it("re-seeds a lecture even when it already has records", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_lectures") return Promise.resolve([lecture]);
+      if (cmd === "get_attendance")
+        return Promise.resolve([
+          {
+            id: "att-1",
+            lecture_id: "lec-1",
+            enrollment_id: "enr-1",
+            student_name: "Alice",
+            status: "present",
+          },
+        ]);
+      return Promise.resolve(undefined);
+    });
+    render(
+      <MemoryRouter initialEntries={["/attendance"]}>
+        <Routes>
+          <Route path="attendance" element={<Attendance />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByText("2026-02-01"));
+
+    // The sheet was not empty, but the seed still runs so late enrollments
+    // land on already-created sheets.
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("seed_attendance", {
+        lectureId: "lec-1",
+        semesterYearId: "sy-1",
+        subjectId: "sub-1",
+        sectionId: "sec-1",
+      })
+    );
+  });
+});
+
 describe("Attendance lecture rows", () => {
   it("has a Materials link that opens the lecture view without selecting the row", async () => {
     render(

@@ -47,6 +47,7 @@ import {
   concreteSectionId,
 } from "@/stores/filter-store";
 import { useUIStore } from "@/stores/ui-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { localizeSeason } from "@/i18n";
 
 /* ───── Update-checking types ───── */
@@ -1274,13 +1275,225 @@ function DataSection() {
   );
 }
 
+/* ───── Profile Section ───── */
+
+interface ProfilePrefs {
+  name: string;
+  email: string;
+}
+
+function ProfileSection() {
+  const { t } = useTranslation();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changing, setChanging] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+
+  useEffect(() => {
+    invoke<ProfilePrefs | null>("get_preferences")
+      .then((prefs) => {
+        if (prefs) {
+          setName(prefs.name);
+          setEmail(prefs.email);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const handleSaveProfile = async () => {
+    if (!name.trim() || !email.trim()) return;
+    setSaving(true);
+    setProfileMsg(null);
+    try {
+      await invoke("update_profile", {
+        name: name.trim(),
+        email: email.trim(),
+      });
+      setProfileMsg({ ok: true, text: t("settings.profile_saved") });
+    } catch (e) {
+      console.error(e);
+      setProfileMsg({ ok: false, text: t("settings.profile_save_failed") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const newTooShort = newPassword.length > 0 && newPassword.length < 6;
+  const mismatch =
+    confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const canChange =
+    currentPassword.length > 0 &&
+    newPassword.length >= 6 &&
+    newPassword === confirmPassword;
+
+  const handleChangePassword = async () => {
+    if (!canChange) return;
+    setChanging(true);
+    setPasswordMsg(null);
+    try {
+      await invoke("update_password", { currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordMsg({
+        ok: true,
+        text: t("settings.profile_password_updated"),
+      });
+    } catch (e) {
+      const msg = String(e);
+      setPasswordMsg({
+        ok: false,
+        text: msg.includes("incorrect")
+          ? t("settings.profile_wrong_current")
+          : msg,
+      });
+    } finally {
+      setChanging(false);
+    }
+  };
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">{t("settings.tab_profile")}</h2>
+        <p className="text-sm text-muted-foreground">
+          {t("settings.profile_desc")}
+        </p>
+      </div>
+
+      {!loaded ? (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      ) : (
+        <>
+          <div className="space-y-2 max-w-md">
+            <div className="space-y-2">
+              <Label htmlFor="profile-name">{t("common.name")}</Label>
+              <Input
+                id="profile-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-email">{t("onboarding.email")}</Label>
+              <Input
+                id="profile-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                size="sm"
+                disabled={saving || !name.trim() || !email.trim()}
+                onClick={handleSaveProfile}
+              >
+                {t("common.save")}
+              </Button>
+              {profileMsg && (
+                <p
+                  className={`text-sm ${profileMsg.ok ? "text-green-600" : "text-destructive"}`}
+                >
+                  {profileMsg.text}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-base font-semibold">
+              {t("settings.profile_password_heading")}
+            </h3>
+          </div>
+          <div className="space-y-2 max-w-md">
+            <div className="space-y-2">
+              <Label htmlFor="profile-current">
+                {t("settings.profile_current_password")}
+              </Label>
+              <Input
+                id="profile-current"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-new">
+                {t("settings.profile_new_password")}
+              </Label>
+              <Input
+                id="profile-new"
+                type="password"
+                placeholder={t("onboarding.password_placeholder")}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              {newTooShort && (
+                <p className="text-xs text-destructive">
+                  {t("onboarding.password_short")}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-confirm">
+                {t("settings.profile_confirm_password")}
+              </Label>
+              <Input
+                id="profile-confirm"
+                type="password"
+                placeholder={t("onboarding.confirm_placeholder")}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+              {mismatch && (
+                <p className="text-xs text-destructive">
+                  {t("onboarding.confirm_mismatch")}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                size="sm"
+                disabled={changing || !canChange}
+                onClick={handleChangePassword}
+              >
+                {t("settings.profile_change_password")}
+              </Button>
+              {passwordMsg && (
+                <p
+                  className={`text-sm ${passwordMsg.ok ? "text-green-600" : "text-destructive"}`}
+                >
+                  {passwordMsg.text}
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 /* ───── Page ───── */
 
 export default function Settings() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<
-    "semesters" | "subjects" | "sections" | "data"
-  >("semesters");
+  const { section } = useSettingsStore();
   const [version, setVersion] = useState<string | null>(null);
   const openGuide = useUIStore((s) => s.openGuide);
 
@@ -1372,6 +1585,9 @@ export default function Settings() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">{t("settings.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {t(`settings.tab_${section}`)}
+          </p>
           {version && (
             <p className="text-xs text-muted-foreground mt-1">
               {t("settings.version")} {version}
@@ -1384,55 +1600,14 @@ export default function Settings() {
         </Button>
       </div>
 
-      <div className="flex gap-2 border-b pb-0">
-        <button
-          onClick={() => setTab("semesters")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === "semesters"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("settings.tab_semesters")}
-        </button>
-        <button
-          onClick={() => setTab("subjects")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === "subjects"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("settings.tab_subjects")}
-        </button>
-        <button
-          onClick={() => setTab("sections")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === "sections"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("settings.tab_sections")}
-        </button>
-        <button
-          onClick={() => setTab("data")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === "data"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("settings.tab_data")}
-        </button>
-      </div>
-
-      {tab === "semesters" ? (
+      {section === "semesters" ? (
         <SemesterYearSection />
-      ) : tab === "subjects" ? (
+      ) : section === "subjects" ? (
         <SubjectSection />
-      ) : tab === "sections" ? (
+      ) : section === "sections" ? (
         <SectionsSection />
+      ) : section === "profile" ? (
+        <ProfileSection />
       ) : (
         <DataSection />
       )}

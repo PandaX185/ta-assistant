@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
@@ -170,16 +170,21 @@ export default function Attendance() {
     });
   };
 
-  // Auto-seed attendance when records are empty after loading
+  // Re-seed attendance once per selected lecture: the seed is idempotent
+  // (it only inserts rows for enrollments missing one), so this also picks
+  // up students enrolled or moved after the sheet was created. The ref
+  // guards against the reload below re-triggering the effect in a loop.
+  const seededLectureRef = useRef<string | null>(null);
   useEffect(() => {
     if (
       selectedLecture &&
-      attendance.length === 0 &&
+      seededLectureRef.current !== selectedLecture.id &&
       !loading &&
       selectedSemesterYearId &&
       selectedSubjectId &&
       sectionId
     ) {
+      seededLectureRef.current = selectedLecture.id;
       const seedAndReload = async () => {
         try {
           await invoke("seed_attendance", {

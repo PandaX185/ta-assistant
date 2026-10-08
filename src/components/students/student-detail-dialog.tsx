@@ -4,14 +4,24 @@ import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Copy, Check, Trash2 } from "lucide-react";
 import { useCopyFeedback } from "@/lib/use-copy-feedback";
+import { useFilterStore } from "@/stores/filter-store";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,6 +68,7 @@ interface StudentDetail {
   student_code: string | null;
   student_email: string | null;
   student_phone: string | null;
+  section_id: string | null;
   quizzes: QuizItem[];
   assignments: AssignmentItem[];
   attendance: AttendanceItem[];
@@ -68,6 +79,7 @@ interface Props {
   enrollmentId: string | null;
   onClose: () => void;
   onDeleted: () => void;
+  onChanged: () => void;
   onEdit: (enrollmentId: string) => void;
 }
 
@@ -75,6 +87,7 @@ export function StudentDetailDialog({
   enrollmentId,
   onClose,
   onDeleted,
+  onChanged,
   onEdit,
 }: Props) {
   const { t } = useTranslation();
@@ -82,6 +95,14 @@ export function StudentDetailDialog({
   const [loading, setLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const { copy, isCopied } = useCopyFeedback();
+  const { sections } = useFilterStore();
+
+  // Move section / unenroll
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [targetSectionId, setTargetSectionId] = useState("");
+  const [transferring, setTransferring] = useState(false);
+  const [unenrollConfirm, setUnenrollConfirm] = useState(false);
+  const transferTargets = sections.filter((s) => s.id !== detail?.section_id);
 
   // Bonus add/remove
   const [bonusValue, setBonusValue] = useState("");
@@ -153,6 +174,36 @@ export function StudentDetailDialog({
     } finally {
       setDeleteConfirm(false);
       onDeleted();
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!enrollmentId || !targetSectionId) return;
+    setTransferring(true);
+    try {
+      await invoke("transfer_enrollment", {
+        enrollmentId,
+        targetSectionId,
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTransferring(false);
+      setTransferOpen(false);
+      setTargetSectionId("");
+      onChanged();
+    }
+  };
+
+  const handleUnenroll = async () => {
+    if (!enrollmentId) return;
+    try {
+      await invoke("delete_enrollment", { id: enrollmentId });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUnenrollConfirm(false);
+      onChanged();
     }
   };
 
@@ -534,13 +585,34 @@ export function StudentDetailDialog({
 
               {/* Actions */}
               <div className="flex justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onEdit(enrollmentId)}
-                >
-                  {t("common.edit")}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEdit(enrollmentId)}
+                  >
+                    {t("common.edit")}
+                  </Button>
+                  {transferTargets.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setTargetSectionId("");
+                        setTransferOpen(true);
+                      }}
+                    >
+                      {t("students.move_section")}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUnenrollConfirm(true)}
+                  >
+                    {t("students.unenroll")}
+                  </Button>
+                </div>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -580,6 +652,70 @@ export function StudentDetailDialog({
               onClick={handleDeleteBonus}
             >
               {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Move-to-section dialog */}
+      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("students.move_section_title")}</DialogTitle>
+            <DialogDescription>
+              {t("students.move_section_desc", {
+                name: detail?.student_name ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <Select value={targetSectionId} onValueChange={setTargetSectionId}>
+            <SelectTrigger aria-label={t("students.move_target_label")}>
+              <SelectValue
+                placeholder={t("students.move_target_placeholder")}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {transferTargets.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              disabled={!targetSectionId || transferring}
+              onClick={handleTransfer}
+            >
+              {t("students.move_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unenroll confirmation */}
+      <AlertDialog open={unenrollConfirm} onOpenChange={setUnenrollConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("students.unenroll_confirm")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("students.unenroll_desc_1")}{" "}
+              <strong>{detail?.student_name}</strong>{" "}
+              {t("students.unenroll_desc_2")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleUnenroll}
+            >
+              {t("students.unenroll")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

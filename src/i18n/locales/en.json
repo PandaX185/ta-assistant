@@ -159,7 +159,17 @@
     "sections_column": "Sections",
     "delete_student": "Delete Student?",
     "delete_student_desc_1": "This will permanently delete",
-    "delete_student_desc_2": "and all their grades, attendance records, and bonuses. This cannot be undone."
+    "delete_student_desc_2": "and all their grades, attendance records, and bonuses. This cannot be undone.",
+    "move_section": "Move",
+    "move_section_title": "Move to Section",
+    "move_section_desc": "Move {{name}} to another section. Quizzes, assignments, bonuses and attendance records move with them.",
+    "move_target_label": "Target section",
+    "move_target_placeholder": "Select section",
+    "move_confirm": "Move",
+    "unenroll": "Unenroll",
+    "unenroll_confirm": "Unenroll from this subject?",
+    "unenroll_desc_1": "This will remove",
+    "unenroll_desc_2": "from this subject along with their grades, attendance records, and bonuses in this subject. The student record itself is kept."
   },
   "grades": {
     "title": "Grades",
@@ -295,7 +305,18 @@
     "select_semester_first": "Select a semester first",
     "select_sem_and_sub": "Select a semester and subject to see its sections.",
     "no_sections_for": "No sections yet for {{subject}}.",
-    "this_subject": "this subject"
+    "this_subject": "this subject",
+    "tab_profile": "Profile",
+    "profile_desc": "Your name and email. The password unlocks the app.",
+    "profile_saved": "Profile updated.",
+    "profile_save_failed": "Could not save the profile.",
+    "profile_password_heading": "Change Password",
+    "profile_current_password": "Current password",
+    "profile_new_password": "New password",
+    "profile_confirm_password": "Confirm new password",
+    "profile_change_password": "Change password",
+    "profile_wrong_current": "Current password is incorrect.",
+    "profile_password_updated": "Password updated."
   },
   "updates": {
     "title": "Updates",

@@ -1,18 +1,27 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink } from "react-router-dom";
-import { Moon, Sun, Globe, Settings } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Moon, Sun, Globe, Menu, Check } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useUIStore } from "@/stores/ui-store";
 import { applyLocale } from "@/i18n";
 import { useLocaleStore } from "@/stores/locale-store";
+import { SETTINGS_SECTIONS, useSettingsStore } from "@/stores/settings-store";
 
 export default function TopBar() {
   const { t } = useTranslation();
   const { darkMode, toggleDarkMode } = useUIStore();
   const { locale, setLocale } = useLocaleStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { section, setSection } = useSettingsStore();
 
   const toggleLang = useCallback(() => {
     const next = locale === "en" ? "ar" : "en";
@@ -55,19 +64,41 @@ export default function TopBar() {
           )}
         </Button>
 
-        <NavLink
-          to="/settings"
-          title={t("sidebar.settings")}
-          className={({ isActive }) =>
-            cn(
-              buttonVariants({ variant: "ghost", size: "icon" }),
-              isActive && "bg-accent text-accent-foreground"
-            )
-          }
-        >
-          <Settings className="w-4 h-4" />
-          <span className="sr-only">{t("sidebar.settings")}</span>
-        </NavLink>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              title={t("sidebar.settings")}
+              className={
+                location.pathname === "/settings"
+                  ? "bg-accent text-accent-foreground"
+                  : undefined
+              }
+            >
+              <Menu className="w-4 h-4" />
+              <span className="sr-only">{t("sidebar.settings")}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {SETTINGS_SECTIONS.map((s) => (
+              <DropdownMenuItem
+                key={s}
+                onSelect={() => {
+                  setSection(s);
+                  navigate("/settings");
+                }}
+              >
+                <span className="w-4">
+                  {location.pathname === "/settings" && section === s && (
+                    <Check className="w-4 h-4" />
+                  )}
+                </span>
+                {t(`settings.tab_${s}`)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

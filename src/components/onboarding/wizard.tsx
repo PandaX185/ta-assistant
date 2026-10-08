@@ -6,6 +6,7 @@ import StepLanguage from "./step-language";
 import StepProfile from "./step-profile";
 import StepPassword from "./step-password";
 import StepShortcut from "./step-shortcut";
+import { isMobilePlatform } from "@/lib/platform";
 
 interface FormData {
   locale: string;
@@ -16,7 +17,10 @@ interface FormData {
   globalShortcut: string;
 }
 
-const TOTAL_STEPS = 4;
+/// The global-shortcut step is desktop-only (the hotkey plugin has no mobile
+/// support), so phones get a shorter flow that ends at the password step.
+const DESKTOP_STEPS = 4;
+const MOBILE_STEPS = 3;
 
 interface Props {
   onComplete: () => void;
@@ -24,6 +28,8 @@ interface Props {
 
 export default function OnboardingWizard({ onComplete }: Props) {
   const { t } = useTranslation();
+  const [isMobile] = useState(() => isMobilePlatform());
+  const totalSteps = isMobile ? MOBILE_STEPS : DESKTOP_STEPS;
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -86,7 +92,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       {/* Steps indicator */}
       <div className="flex items-center gap-2 mb-10">
-        {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+        {Array.from({ length: totalSteps }, (_, i) => (
           <div key={i} className="flex items-center gap-2">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
@@ -99,7 +105,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
             >
               {i < step ? "✓" : i + 1}
             </div>
-            {i < TOTAL_STEPS - 1 && (
+            {i < totalSteps - 1 && (
               <div
                 className={`w-12 h-0.5 transition-colors ${
                   i < step ? "bg-primary" : "bg-border"
@@ -132,7 +138,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
             onChange={(password) => update({ password })}
           />
         )}
-        {step === 3 && (
+        {!isMobile && step === 3 && (
           <StepShortcut
             value={data.globalShortcut}
             onChange={(globalShortcut) => update({ globalShortcut })}
@@ -153,7 +159,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
             {t("onboarding.back")}
           </button>
 
-          {step < TOTAL_STEPS - 1 ? (
+          {step < totalSteps - 1 ? (
             <button
               onClick={() => setStep((s) => s + 1)}
               disabled={!canNext()}

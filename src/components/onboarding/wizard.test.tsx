@@ -43,7 +43,11 @@ describe("OnboardingWizard", () => {
     // Step 4: shortcut — capture a key combo
     expect(screen.getByText("Global Shortcut")).toBeInTheDocument();
     const shortcutInput = screen.getByLabelText("Keybinding");
-    fireEvent.keyDown(shortcutInput, { key: "k", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(shortcutInput, {
+      key: "k",
+      ctrlKey: true,
+      shiftKey: true,
+    });
     expect(shortcutInput).toHaveValue("Ctrl+Shift+K");
 
     // Save
@@ -57,7 +61,7 @@ describe("OnboardingWizard", () => {
         locale: "en",
         theme: "light",
         globalShortcut: "Ctrl+Shift+K",
-      }),
+      })
     );
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
   });
@@ -72,7 +76,9 @@ describe("OnboardingWizard", () => {
     await user.click(screen.getByRole("button", { name: "Next" })); // → password
 
     await user.type(screen.getByLabelText("Password"), "123");
-    expect(screen.getByText("Must be at least 6 characters")).toBeInTheDocument();
+    expect(
+      screen.getByText("Must be at least 6 characters")
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
     await user.type(screen.getByLabelText("Password"), "456");
@@ -124,8 +130,55 @@ describe("OnboardingWizard", () => {
     await user.click(screen.getByRole("button", { name: "Get Started" }));
 
     await waitFor(() =>
-      expect(screen.getByText("Error: db locked")).toBeInTheDocument(),
+      expect(screen.getByText("Error: db locked")).toBeInTheDocument()
     );
     expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("skips the shortcut step on mobile and saves with the default shortcut", async () => {
+    const originalUA = navigator.userAgent;
+    Object.defineProperty(window.navigator, "userAgent", {
+      value:
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36",
+      configurable: true,
+    });
+    try {
+      vi.mocked(invoke).mockResolvedValue(null);
+      const onComplete = vi.fn();
+      const user = userEvent.setup();
+
+      render(<OnboardingWizard onComplete={onComplete} />);
+
+      await user.click(screen.getByRole("button", { name: "Next" }));
+      expect(screen.getByText("Your Profile")).toBeInTheDocument();
+      await user.type(screen.getByLabelText("Full Name"), "Alice Smith");
+      await user.type(screen.getByLabelText("Email"), "alice@uni.edu");
+      await user.click(screen.getByRole("button", { name: "Next" }));
+
+      expect(screen.getByText("Set a Password")).toBeInTheDocument();
+      await user.type(screen.getByLabelText("Password"), "secret123");
+      await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+
+      // No shortcut step on mobile: Get Started is offered right here.
+      expect(screen.queryByText("Global Shortcut")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Get Started" }));
+
+      await waitFor(() =>
+        expect(invoke).toHaveBeenCalledWith("save_preferences", {
+          name: "Alice Smith",
+          email: "alice@uni.edu",
+          password: "secret123",
+          locale: "en",
+          theme: "light",
+          globalShortcut: "Ctrl+Shift+P",
+        })
+      );
+      await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    } finally {
+      Object.defineProperty(window.navigator, "userAgent", {
+        value: originalUA,
+        configurable: true,
+      });
+    }
   });
 });

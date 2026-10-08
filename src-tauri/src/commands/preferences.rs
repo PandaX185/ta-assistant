@@ -25,7 +25,7 @@ pub fn get_preferences(app: AppHandle) -> Result<Option<Preferences>, String> {
     get_preferences_impl(&conn)
 }
 
-fn get_preferences_impl(conn: &Connection) -> Result<Option<Preferences>, String> {
+pub(crate) fn get_preferences_impl(conn: &Connection) -> Result<Option<Preferences>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT name, email, locale, theme, global_shortcut, auto_lock_minutes, created_at, guide_seen
@@ -88,7 +88,22 @@ pub fn save_preferences(
     global_shortcut: String,
 ) -> Result<(), String> {
     let conn = crate::db::open_db(&app)?;
-    save_preferences_impl(&conn, name, email, password, locale, theme, global_shortcut)
+    save_preferences_impl(
+        &conn,
+        name,
+        email,
+        password,
+        locale,
+        theme,
+        global_shortcut.clone(),
+    )?;
+    // The OS hotkey was registered at startup with a placeholder value (the
+    // wizard is the only writer); re-register so the chosen shortcut takes
+    // effect immediately. Best effort — a persisted-but-unparseable value
+    // falls back to the default inside register_search_shortcut.
+    #[cfg(desktop)]
+    crate::register_search_shortcut(&app, &global_shortcut);
+    Ok(())
 }
 
 fn save_preferences_impl(
@@ -100,12 +115,7 @@ fn save_preferences_impl(
     theme: String,
     global_shortcut: String,
 ) -> Result<(), String> {
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| format!("Password hashing failed: {e}"))?
-        .to_string();
+    let password_hash = hash_password(&password)?;
 
     conn.execute(
         "INSERT INTO preferences (id, name, email, password, locale, theme, global_shortcut)
@@ -114,6 +124,71 @@ fn save_preferences_impl(
     )
     .map_err(|e| format!("Insert failed: {e}"))?;
 
+    Ok(())
+}
+
+fn hash_password(password: &str) -> Result<String, String> {
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|e| format!("Password hashing failed: {e}"))
+        .map(|hash| hash.to_string())
+}
+
+/// Minimum accepted password length (matches the onboarding wizard rule).
+const MIN_PASSWORD_LEN: usize = 6;
+
+#[tauri::command]
+pub fn update_profile(app: AppHandle, name: String, email: String) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    update_profile_impl(&conn, name, email)
+}
+
+fn update_profile_impl(conn: &Connection, name: String, email: String) -> Result<(), String> {
+    let name = name.trim();
+    let email = email.trim();
+    if name.is_empty() {
+        return Err("Name cannot be empty".into());
+    }
+    if email.is_empty() {
+        return Err("Email cannot be empty".into());
+    }
+    conn.execute(
+        "UPDATE preferences SET name = ?1, email = ?2 WHERE id = 1",
+        rusqlite::params![name, email],
+    )
+    .map_err(|e| format!("Update profile failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_password(
+    app: AppHandle,
+    current_password: String,
+    new_password: String,
+) -> Result<(), String> {
+    let conn = crate::db::open_db(&app)?;
+    update_password_impl(&conn, current_password, new_password)
+}
+
+fn update_password_impl(
+    conn: &Connection,
+    current_password: String,
+    new_password: String,
+) -> Result<(), String> {
+    if !verify_password_impl(conn, current_password)? {
+        return Err("Current password is incorrect".into());
+    }
+    if new_password.len() < MIN_PASSWORD_LEN {
+        return Err("New password must be at least 6 characters".into());
+    }
+    let password_hash = hash_password(&new_password)?;
+    conn.execute(
+        "UPDATE preferences SET password = ?1 WHERE id = 1",
+        rusqlite::params![password_hash],
+    )
+    .map_err(|e| format!("Update password failed: {e}"))?;
     Ok(())
 }
 
@@ -258,5 +333,45 @@ mod tests {
         assert!(get_preferences_impl(&conn).unwrap().unwrap().guide_seen);
         set_guide_seen_impl(&conn, false).unwrap();
         assert!(!get_preferences_impl(&conn).unwrap().unwrap().guide_seen);
+    }
+
+    #[test]
+    fn update_profile_persists_trimmed_values() {
+        let conn = saved_conn();
+        update_profile_impl(&conn, "  Sara Omar  ".into(), "  sara@uni.edu ".into()).unwrap();
+        let prefs = get_preferences_impl(&conn).unwrap().unwrap();
+        assert_eq!(prefs.name, "Sara Omar");
+        assert_eq!(prefs.email, "sara@uni.edu");
+        // Password hash untouched.
+        assert!(verify_password_impl(&conn, "secret123".into()).unwrap());
+    }
+
+    #[test]
+    fn update_profile_rejects_blanks() {
+        let conn = saved_conn();
+        assert!(update_profile_impl(&conn, "   ".into(), "a@b.com".into()).is_err());
+        assert!(update_profile_impl(&conn, "Sara".into(), "   ".into()).is_err());
+        let prefs = get_preferences_impl(&conn).unwrap().unwrap();
+        assert_eq!(prefs.name, "Abdullah");
+        assert_eq!(prefs.email, "abdullah@example.com");
+    }
+
+    #[test]
+    fn update_password_round_trip() {
+        let conn = saved_conn();
+        update_password_impl(&conn, "secret123".into(), "newpass456".into()).unwrap();
+        assert!(verify_password_impl(&conn, "newpass456".into()).unwrap());
+        assert!(!verify_password_impl(&conn, "secret123".into()).unwrap());
+    }
+
+    #[test]
+    fn update_password_rejects_wrong_current_and_short_new() {
+        let conn = saved_conn();
+        let err = update_password_impl(&conn, "nope".into(), "newpass456".into()).unwrap_err();
+        assert!(err.contains("incorrect"), "{err}");
+        let err = update_password_impl(&conn, "secret123".into(), "short".into()).unwrap_err();
+        assert!(err.contains("at least 6"), "{err}");
+        // Original password still works.
+        assert!(verify_password_impl(&conn, "secret123".into()).unwrap());
     }
 }

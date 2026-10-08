@@ -618,6 +618,10 @@ export default function Students() {
           setDetailEnrollmentId(null);
           loadEnrollments();
         }}
+        onChanged={() => {
+          setDetailEnrollmentId(null);
+          loadEnrollments();
+        }}
         onEdit={(enrollmentId) => {
           const enr = enrollments.find((e) => e.id === enrollmentId);
           if (enr) {

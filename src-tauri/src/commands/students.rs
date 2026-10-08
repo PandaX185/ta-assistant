@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -21,6 +21,7 @@ pub struct Enrollment {
     pub student_code: Option<String>,
     pub student_email: Option<String>,
     pub student_phone: Option<String>,
+    pub section_id: Option<String>,
     pub section_name: Option<String>,
 }
 
@@ -64,6 +65,7 @@ pub struct StudentDetail {
     pub student_code: Option<String>,
     pub student_email: Option<String>,
     pub student_phone: Option<String>,
+    pub section_id: Option<String>,
     pub quizzes: Vec<QuizDetailItem>,
     pub assignments: Vec<AssignmentDetailItem>,
     pub attendance: Vec<AttendanceDetailItem>,
@@ -191,7 +193,7 @@ fn get_enrollments_impl(
 ) -> Result<Vec<Enrollment>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT e.id, e.student_id, e.semester_year_id, e.subject_id, s.name, s.student_id, s.email, s.phone, sec.name
+            "SELECT e.id, e.student_id, e.semester_year_id, e.subject_id, s.name, s.student_id, s.email, s.phone, e.section_id, sec.name
              FROM enrollments e
              JOIN students s ON s.id = e.student_id
              LEFT JOIN sections sec ON sec.id = e.section_id
@@ -214,7 +216,8 @@ fn get_enrollments_impl(
                     student_code: row.get(5)?,
                     student_email: row.get(6)?,
                     student_phone: row.get(7)?,
-                    section_name: row.get(8)?,
+                    section_id: row.get(8)?,
+                    section_name: row.get(9)?,
                 })
             },
         )
@@ -246,17 +249,176 @@ pub(crate) fn create_enrollment_impl(
     subject_id: String,
     section_id: String,
 ) -> Result<(), String> {
+    let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id) VALUES (?, ?, ?, ?, ?)",
-        rusqlite::params![
-            uuid::Uuid::new_v4().to_string(),
-            student_id,
-            semester_year_id,
-            subject_id,
-            section_id
-        ],
+        rusqlite::params![id, student_id, semester_year_id, subject_id, section_id],
     )
     .map_err(|e| format!("Create enrollment failed: {e}"))?;
+    // The student must show up in this section's already-created lecture
+    // sheets (as 'absent'), not just in future ones.
+    backfill_attendance_for_enrollment(conn, &id, &section_id)?;
+    Ok(())
+}
+
+/// Inserts 'absent' attendance rows for every lecture in the given section
+/// that has no row for the enrollment yet. Idempotent — never overwrites
+/// existing marks. Used when a student is enrolled or moved mid-term.
+fn backfill_attendance_for_enrollment(
+    conn: &Connection,
+    enrollment_id: &str,
+    section_id: &str,
+) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT l.id FROM lectures l
+             WHERE l.section_id = ?1
+               AND NOT EXISTS (
+                   SELECT 1 FROM attendance a
+                   WHERE a.lecture_id = l.id AND a.enrollment_id = ?2
+               )",
+        )
+        .map_err(|e| format!("Query prepare failed: {e}"))?;
+    let ids: Vec<String> = stmt
+        .query_map(rusqlite::params![section_id, enrollment_id], |row| {
+            row.get(0)
+        })
+        .map_err(|e| format!("Query failed: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+    for lecture_id in &ids {
+        conn.execute(
+            "INSERT INTO attendance (id, lecture_id, enrollment_id, status)
+             VALUES (?, ?, ?, 'absent')",
+            rusqlite::params![uuid::Uuid::new_v4().to_string(), lecture_id, enrollment_id],
+        )
+        .map_err(|e| format!("Backfill attendance failed: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Moves an enrollment to another section of the same subject, carrying all
+/// quizzes, assignments and bonuses with it. Old-section attendance marks
+/// are dropped (the student left those lectures) and the target section's
+/// existing lectures get 'absent' rows for the student. If the student is
+/// already enrolled in the target section, the two enrollments are merged
+/// instead: grade rows are re-keyed onto the surviving enrollment.
+#[tauri::command]
+pub fn transfer_enrollment(
+    app: AppHandle,
+    enrollment_id: String,
+    target_section_id: String,
+) -> Result<(), String> {
+    let mut conn = crate::db::open_db(&app)?;
+    transfer_enrollment_impl(&mut conn, enrollment_id, target_section_id)
+}
+
+fn transfer_enrollment_impl(
+    conn: &mut Connection,
+    enrollment_id: String,
+    target_section_id: String,
+) -> Result<(), String> {
+    let (student_id, semester_year_id, subject_id, current_section_id): (
+        String,
+        String,
+        String,
+        Option<String>,
+    ) = conn
+        .query_row(
+            "SELECT student_id, semester_year_id, subject_id, section_id
+             FROM enrollments WHERE id = ?1",
+            rusqlite::params![enrollment_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .map_err(|e| format!("Enrollment not found: {e}"))?;
+
+    // No-op when already in the target section.
+    if current_section_id.as_deref() == Some(target_section_id.as_str()) {
+        return Ok(());
+    }
+
+    // The target section must belong to the same subject and semester.
+    let (target_subject_id, target_semester_id): (String, String) = conn
+        .query_row(
+            "SELECT subject_id, semester_year_id FROM sections WHERE id = ?1",
+            rusqlite::params![target_section_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| format!("Target section not found: {e}"))?;
+    if target_subject_id != subject_id || target_semester_id != semester_year_id {
+        return Err("Target section belongs to a different subject or semester".into());
+    }
+
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("Transfer failed: {e}"))?;
+
+    // Merge path: the student already has an enrollment in the target section.
+    // Re-key the grade rows onto the surviving enrollment, then drop the source.
+    let existing: Option<String> = tx
+        .query_row(
+            "SELECT id FROM enrollments
+             WHERE student_id = ?1 AND semester_year_id = ?2 AND subject_id = ?3
+               AND section_id = ?4 AND id != ?5",
+            rusqlite::params![
+                student_id,
+                semester_year_id,
+                subject_id,
+                target_section_id,
+                enrollment_id
+            ],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("Transfer failed: {e}"))?;
+
+    if let Some(target_enrollment_id) = existing {
+        for table in ["quizzes", "assignments", "bonuses"] {
+            tx.execute(
+                &format!("UPDATE {table} SET enrollment_id = ?1 WHERE enrollment_id = ?2"),
+                rusqlite::params![target_enrollment_id, enrollment_id],
+            )
+            .map_err(|e| format!("Transfer failed: {e}"))?;
+        }
+        tx.execute(
+            "DELETE FROM attendance WHERE enrollment_id = ?1",
+            rusqlite::params![enrollment_id],
+        )
+        .map_err(|e| format!("Transfer failed: {e}"))?;
+        tx.execute(
+            "DELETE FROM enrollments WHERE id = ?1",
+            rusqlite::params![enrollment_id],
+        )
+        .map_err(|e| format!("Transfer failed: {e}"))?;
+        backfill_attendance_for_enrollment(&tx, &target_enrollment_id, &target_section_id)?;
+        tx.commit().map_err(|e| format!("Transfer failed: {e}"))?;
+        return Ok(());
+    }
+
+    // Move path: keep the enrollment id, so quizzes, assignments and bonuses
+    // follow the student as-is.
+    tx.execute(
+        "UPDATE enrollments SET section_id = ?1 WHERE id = ?2",
+        rusqlite::params![target_section_id, enrollment_id],
+    )
+    .map_err(|e| format!("Transfer failed: {e}"))?;
+
+    // Drop attendance marks from other sections' lectures so the student
+    // stops appearing on those sheets. Subject-wide lectures (NULL section)
+    // are kept — they apply regardless of section.
+    tx.execute(
+        "DELETE FROM attendance
+         WHERE enrollment_id = ?1
+           AND lecture_id IN (
+               SELECT id FROM lectures
+               WHERE section_id IS NOT NULL AND section_id != ?2
+           )",
+        rusqlite::params![enrollment_id, target_section_id],
+    )
+    .map_err(|e| format!("Transfer failed: {e}"))?;
+
+    backfill_attendance_for_enrollment(&tx, &enrollment_id, &target_section_id)?;
+    tx.commit().map_err(|e| format!("Transfer failed: {e}"))?;
     Ok(())
 }
 
@@ -286,9 +448,16 @@ fn get_student_detail_impl(
     enrollment_id: String,
 ) -> Result<StudentDetail, String> {
     // Get student info
-    let (student_id, student_name, student_code, student_email, student_phone) = conn
+    let (student_id, student_name, student_code, student_email, student_phone, section_id): (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = conn
         .query_row(
-            "SELECT s.id, s.name, s.student_id, s.email, s.phone
+            "SELECT s.id, s.name, s.student_id, s.email, s.phone, e.section_id
              FROM enrollments e
              JOIN students s ON s.id = e.student_id
              WHERE e.id = ?1",
@@ -300,6 +469,7 @@ fn get_student_detail_impl(
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
+                    row.get(5)?,
                 ))
             },
         )
@@ -406,6 +576,7 @@ fn get_student_detail_impl(
         student_code,
         student_email,
         student_phone,
+        section_id,
         quizzes,
         assignments,
         attendance,
@@ -623,6 +794,242 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn delete_enrollment_cascades_grades_attendance_bonuses() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        seed_lecture(&conn, "l1", &sy, &sub, "sec-1", "2026-02-01");
+        seed_child_rows(&conn);
+        delete_enrollment_impl(&conn, "enr-a".into()).unwrap();
+        for table in ["quizzes", "assignments", "bonuses", "attendance"] {
+            let count: i64 = conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE enrollment_id = 'enr-a'"),
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 0, "{table} rows should cascade");
+        }
+        // The student record itself survives the unenroll.
+        assert_eq!(get_students_impl(&conn).unwrap().len(), 2);
+    }
+
+    /// Second section for the transfer tests.
+    fn seed_group_b(conn: &Connection, sy: &str, sub: &str) {
+        conn.execute(
+            "INSERT INTO sections (id, subject_id, semester_year_id, name, color)
+             VALUES ('sec-2', ?1, ?2, 'Group B', NULL)",
+            rusqlite::params![sub, sy],
+        )
+        .unwrap();
+    }
+
+    fn seed_lecture(conn: &Connection, id: &str, sy: &str, sub: &str, section: &str, date: &str) {
+        conn.execute(
+            "INSERT INTO lectures (id, subject_id, semester_year_id, section_id, title, date)
+             VALUES (?1, ?2, ?3, ?4, 'Lecture', ?5)",
+            rusqlite::params![id, sub, sy, section, date],
+        )
+        .unwrap();
+    }
+
+    /// One quiz, one assignment, one bonus and one 'present' attendance row
+    /// for enr-a on lecture l1.
+    fn seed_child_rows(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO quizzes (id, enrollment_id, name, max_score, score, date)
+             VALUES ('q1', 'enr-a', 'Quiz 1', 10, 8.5, '2026-01-01')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO assignments (id, enrollment_id, name, max_score, score, due_date)
+             VALUES ('a1', 'enr-a', 'HW 1', 5, 4.0, '2026-01-05')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO bonuses (id, enrollment_id, value, reason, date)
+             VALUES ('b1', 'enr-a', 1.0, 'Participation', '2026-02-02')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO attendance (id, lecture_id, enrollment_id, status)
+             VALUES ('att1', 'l1', 'enr-a', 'present')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn child_count(conn: &Connection, table: &str, enrollment_id: &str) -> i64 {
+        conn.query_row(
+            &format!("SELECT COUNT(*) FROM {table} WHERE enrollment_id = ?1"),
+            rusqlite::params![enrollment_id],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn transfer_moves_enrollment_and_grades_follow() {
+        let mut conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        seed_lecture(&conn, "l1", &sy, &sub, "sec-1", "2026-02-01");
+        seed_child_rows(&conn);
+        seed_group_b(&conn, &sy, &sub);
+
+        transfer_enrollment_impl(&mut conn, "enr-a".into(), "sec-2".into()).unwrap();
+
+        // Same enrollment row, now under Group B.
+        let all = get_enrollments_impl(&conn, sy, sub, None).unwrap();
+        let alice = all.iter().find(|e| e.student_name == "Alice").unwrap();
+        assert_eq!(alice.id, "enr-a");
+        assert_eq!(alice.section_id.as_deref(), Some("sec-2"));
+        assert_eq!(alice.section_name.as_deref(), Some("Group B"));
+
+        // Grades and bonuses followed the enrollment id.
+        assert_eq!(child_count(&conn, "quizzes", "enr-a"), 1);
+        assert_eq!(child_count(&conn, "assignments", "enr-a"), 1);
+        assert_eq!(child_count(&conn, "bonuses", "enr-a"), 1);
+    }
+
+    #[test]
+    fn transfer_drops_old_attendance_and_backfills_target() {
+        let mut conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        seed_group_b(&conn, &sy, &sub);
+        seed_lecture(&conn, "l1", &sy, &sub, "sec-1", "2026-02-01");
+        seed_lecture(&conn, "l2", &sy, &sub, "sec-2", "2026-02-01");
+        seed_child_rows(&conn);
+
+        transfer_enrollment_impl(&mut conn, "enr-a".into(), "sec-2".into()).unwrap();
+
+        // Old-section mark is gone; the student no longer appears on that sheet.
+        assert_eq!(child_count(&conn, "attendance", "enr-a"), 1);
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM attendance WHERE enrollment_id = 'enr-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "absent");
+        let lecture: String = conn
+            .query_row(
+                "SELECT lecture_id FROM attendance WHERE enrollment_id = 'enr-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(lecture, "l2");
+
+        // The detail view only sees the new section's lectures.
+        let d = get_student_detail_impl(&conn, "enr-a".into()).unwrap();
+        assert_eq!(d.attendance.len(), 1);
+        assert_eq!(d.attendance[0].lecture_id, "l2");
+        assert_eq!(d.attendance[0].status, "absent");
+        assert_eq!(d.section_id.as_deref(), Some("sec-2"));
+    }
+
+    #[test]
+    fn transfer_merges_when_target_enrollment_exists() {
+        let mut conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        seed_group_b(&conn, &sy, &sub);
+        seed_lecture(&conn, "l1", &sy, &sub, "sec-1", "2026-02-01");
+        seed_lecture(&conn, "l2", &sy, &sub, "sec-2", "2026-02-01");
+        seed_child_rows(&conn);
+        // Bob is in both sections; his Group B enrollment has its own quiz.
+        conn.execute(
+            "INSERT INTO enrollments (id, student_id, semester_year_id, subject_id, section_id)
+             VALUES ('enr-b2', 'stu-b', ?1, ?2, 'sec-2')",
+            rusqlite::params![sy, sub],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO quizzes (id, enrollment_id, name, max_score, score, date)
+             VALUES ('q-b2', 'enr-b2', 'Quiz 1', 10, 9.0, '2026-01-03')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO quizzes (id, enrollment_id, name, max_score, score, date)
+             VALUES ('q-b1', 'enr-b', 'Quiz 1', 10, 7.0, '2026-01-01')",
+            [],
+        )
+        .unwrap();
+
+        transfer_enrollment_impl(&mut conn, "enr-b".into(), "sec-2".into()).unwrap();
+
+        // Source enrollment is gone; both grade rows live on the survivor.
+        let all = get_enrollments_impl(&conn, sy, sub, None).unwrap();
+        assert!(all.iter().all(|e| e.id != "enr-b"));
+        assert_eq!(child_count(&conn, "quizzes", "enr-b"), 0);
+        assert_eq!(child_count(&conn, "quizzes", "enr-b2"), 2);
+        assert_eq!(child_count(&conn, "attendance", "enr-b"), 0);
+    }
+
+    #[test]
+    fn transfer_rejects_section_from_another_subject() {
+        let mut conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        test_utils::seed_subject(&conn, "sub-2", "Networks");
+        conn.execute(
+            "INSERT INTO sections (id, subject_id, semester_year_id, name, color)
+             VALUES ('sec-x', 'sub-2', ?1, 'Group X', NULL)",
+            rusqlite::params![sy],
+        )
+        .unwrap();
+
+        let err = transfer_enrollment_impl(&mut conn, "enr-a".into(), "sec-x".into()).unwrap_err();
+        assert!(err.contains("different subject or semester"), "{err}");
+
+        // Nothing moved.
+        let all = get_enrollments_impl(&conn, sy, sub, None).unwrap();
+        let alice = all.iter().find(|e| e.student_name == "Alice").unwrap();
+        assert_eq!(alice.section_id.as_deref(), Some("sec-1"));
+    }
+
+    #[test]
+    fn transfer_is_noop_in_same_section() {
+        let mut conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        transfer_enrollment_impl(&mut conn, "enr-a".into(), "sec-1".into()).unwrap();
+        let all = get_enrollments_impl(&conn, sy, sub, None).unwrap();
+        let alice = all.iter().find(|e| e.student_name == "Alice").unwrap();
+        assert_eq!(alice.section_id.as_deref(), Some("sec-1"));
+    }
+
+    #[test]
+    fn create_enrollment_backfills_existing_lectures() {
+        let conn = test_utils::test_conn();
+        let (sy, sub, _a, _b) = test_utils::seed_basic_scenario(&conn);
+        seed_lecture(&conn, "l1", &sy, &sub, "sec-1", "2026-02-01");
+        test_utils::seed_student(&conn, "stu-c", "Charlie");
+        create_enrollment_impl(
+            &conn,
+            "stu-c".into(),
+            sy.clone(),
+            sub.clone(),
+            "sec-1".into(),
+        )
+        .unwrap();
+
+        let enr = get_enrollments_impl(&conn, sy, sub, Some("sec-1".into())).unwrap();
+        let charlie = enr.iter().find(|e| e.student_name == "Charlie").unwrap();
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM attendance
+                 WHERE lecture_id = 'l1' AND enrollment_id = ?1",
+                rusqlite::params![charlie.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "absent");
     }
 
     #[test]
